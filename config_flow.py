@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
-from nr7101 import nr7101  # Import the correct module/class
+from nr7101 import nr7101
 
 from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 
@@ -33,11 +33,11 @@ async def validate_input(hass: core.HomeAssistant, data):
             data[CONF_HOST], data[CONF_USERNAME], data[CONF_PASSWORD]
         )
 
-        # Test login
-        await hass.async_add_executor_job(router.login)
+        # Test that we can get data
+        test_data = await hass.async_add_executor_job(router.get_data)
+        if not test_data:
+            raise Exception("No data received from router")
 
-        # Logout to clean up session
-        await hass.async_add_executor_job(router.logout)
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel NR7101: %s", ex)
         raise CannotConnect from ex

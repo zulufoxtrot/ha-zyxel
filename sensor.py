@@ -2,6 +2,9 @@
 """Support for Zyxel NR7101 sensors."""
 from __future__ import annotations
 
+import logging
+from typing import Any, Dict, Optional
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -15,16 +18,48 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
 
-from .const import (
-    DOMAIN,
-    SENSOR_RSSI,
-    SENSOR_SIGNAL_STRENGTH,
-    SENSOR_CELL_ID,
-    SENSOR_CONNECTION_STATUS,
-    SENSOR_NETWORK_TYPE,
-    SENSOR_FIRMWARE_VERSION,
-    SENSOR_MODEL,
-)
+from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+# Define some known sensor types for proper configuration
+SIGNAL_SENSORS = {
+    "rssi": {
+        "name": "RSSI",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "signalStrength": {
+        "name": "Signal Strength",
+        "unit": "%",
+        "icon": "mdi:signal",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "cellId": {
+        "name": "Cell ID",
+        "unit": None,
+        "icon": "mdi:cell-tower",
+        "device_class": None,
+        "state_class": None,
+    },
+    "connectionStatus": {
+        "name": "Connection Status",
+        "unit": None,
+        "icon": "mdi:router-wireless",
+        "device_class": None,
+        "state_class": None,
+    },
+    "networkType": {
+        "name": "Network Type",
+        "unit": None,
+        "icon": "mdi:network",
+        "device_class": None,
+        "state_class": None,
+    },
+}
 
 
 async def async_setup_entry(
@@ -32,175 +67,140 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Zyxel NR7101 sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    router = hass.data[DOMAIN][entry.entry_id]["router"]
+
+    if not coordinator.data:
+        _LOGGER.error("No data received from Zyxel NR7101")
+        return
 
     sensors = []
 
-    # Add RSSI sensor
-    if coordinator.data and SENSOR_RSSI in coordinator.data:
-        sensors.append(ZyxelRSSISensor(coordinator, entry))
+    # Process all keys in the JSON and create sensors for them
+    # We'll use a flat structure for simplicity
+    for key, value in _flatten_dict(coordinator.data).items():
+        # Skip non-scalar values
+        if not _is_value_scalar(value):
+            continue
 
-    # Add signal strength sensor
-    if coordinator.data and SENSOR_SIGNAL_STRENGTH in coordinator.data:
-        sensors.append(ZyxelSignalStrengthSensor(coordinator, entry))
+        # Check if this is a known sensor type
+        sensor_config = SIGNAL_SENSORS.get(key.split(".")[-1], None)
 
-    # Add connection status sensor
-    if coordinator.data and SENSOR_CONNECTION_STATUS in coordinator.data:
-        sensors.append(ZyxelConnectionStatusSensor(coordinator, entry))
-
-    # Add network type sensor
-    if coordinator.data and SENSOR_NETWORK_TYPE in coordinator.data:
-        sensors.append(ZyxelNetworkTypeSensor(coordinator, entry))
-
-    # Add cell ID sensor
-    if coordinator.data and SENSOR_CELL_ID in coordinator.data:
-        sensors.append(ZyxelCellIdSensor(coordinator, entry))
+        if sensor_config:
+            # Create a configured sensor for known types
+            sensors.append(
+                ZyxelConfiguredSensor(
+                    coordinator,
+                    entry,
+                    key,
+                    sensor_config
+                )
+            )
+        else:
+            # Create a generic sensor for unknown types
+            sensors.append(
+                ZyxelGenericSensor(
+                    coordinator,
+                    entry,
+                    key
+                )
+            )
 
     async_add_entities(sensors)
+
+
+def _flatten_dict(d: Dict[str, Any], parent_key: str = "") -> Dict[str, Any]:
+    """Flatten a nested dictionary with dot notation for keys."""
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}.{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def _is_value_scalar(value: Any) -> bool:
+    """Check if a value is a scalar (string, number, bool)."""
+    return isinstance(value, (str, int, float, bool)) or value is None
 
 
 class ZyxelSensorBase(CoordinatorEntity):
     """Base class for Zyxel NR7101 sensors."""
 
-    def __init__(self, coordinator, entry):
+    def __init__(self, coordinator, entry, key):
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_{self._sensor_type}"
+        self._key = key
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel NR7101 ({entry.data['host']})",
             manufacturer="Zyxel",
-            model=coordinator.data.get(SENSOR_MODEL, "NR7101") if coordinator.data else "NR7101",
-            sw_version=coordinator.data.get(SENSOR_FIRMWARE_VERSION, "Unknown") if coordinator.data else "Unknown",
+            model="NR7101",
         )
 
-
-class ZyxelRSSISensor(ZyxelSensorBase):
-    """Representation of a Zyxel NR7101 RSSI sensor."""
-
-    _sensor_type = SENSOR_RSSI
-
     @property
-    def name(self):
-        """Return the name of the sensor."""
-        return "Zyxel NR7101 RSSI"
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not self.coordinator.last_update_success:
+            return False
 
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        if self.coordinator.data and SENSOR_RSSI in self.coordinator.data:
-            return self.coordinator.data[SENSOR_RSSI]
-        return None
+        # Check if the key exists in the data
+        try:
+            self._get_value_from_path()
+            return True
+        except (KeyError, AttributeError):
+            return False
 
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return "dBm"
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return "mdi:signal"
-
-    @property
-    def device_class(self):
-        """Return the device class."""
-        return SensorDeviceClass.SIGNAL_STRENGTH
-
-    @property
-    def state_class(self):
-        """Return the state class."""
-        return SensorStateClass.MEASUREMENT
+    def _get_value_from_path(self) -> Any:
+        """Get a value from nested dictionaries using the flattened key."""
+        keys = self._key.split(".")
+        value = self.coordinator.data
+        for k in keys:
+            value = value[k]
+        return value
 
 
-class ZyxelSignalStrengthSensor(ZyxelSensorBase):
-    """Representation of a Zyxel NR7101 signal strength sensor."""
+class ZyxelConfiguredSensor(ZyxelSensorBase):
+    """Representation of a configured Zyxel NR7101 sensor."""
 
-    _sensor_type = SENSOR_SIGNAL_STRENGTH
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return "Zyxel NR7101 Signal Strength"
+    def __init__(self, coordinator, entry, key, config):
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, key)
+        self._config = config
+        self._attr_name = f"Zyxel NR7101 {config['name']}"
+        self._attr_unit_of_measurement = config["unit"]
+        self._attr_icon = config["icon"]
+        self._attr_device_class = config["device_class"]
+        self._attr_state_class = config["state_class"]
 
     @property
     def state(self):
         """Return the state of the sensor."""
-        if self.coordinator.data and SENSOR_SIGNAL_STRENGTH in self.coordinator.data:
-            return self.coordinator.data[SENSOR_SIGNAL_STRENGTH]
-        return None
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return "mdi:signal"
+        try:
+            return self._get_value_from_path()
+        except (KeyError, AttributeError):
+            return None
 
 
-class ZyxelConnectionStatusSensor(ZyxelSensorBase):
-    """Representation of a Zyxel NR7101 connection status sensor."""
-
-    _sensor_type = SENSOR_CONNECTION_STATUS
+class ZyxelGenericSensor(ZyxelSensorBase):
+    """Representation of a generic Zyxel NR7101 sensor."""
 
     @property
     def name(self):
         """Return the name of the sensor."""
-        return "Zyxel NR7101 Connection Status"
+        name_parts = self._key.split(".")
+        return f"Zyxel NR7101 {'.'.join(name_parts)}"
 
     @property
     def state(self):
         """Return the state of the sensor."""
-        if self.coordinator.data and SENSOR_CONNECTION_STATUS in self.coordinator.data:
-            return self.coordinator.data[SENSOR_CONNECTION_STATUS]
-        return None
+        try:
+            return self._get_value_from_path()
+        except (KeyError, AttributeError):
+            return None
 
     @property
     def icon(self):
         """Return the icon."""
         return "mdi:router-wireless"
-
-
-class ZyxelNetworkTypeSensor(ZyxelSensorBase):
-    """Representation of a Zyxel NR7101 network type sensor."""
-
-    _sensor_type = SENSOR_NETWORK_TYPE
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return "Zyxel NR7101 Network Type"
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        if self.coordinator.data and SENSOR_NETWORK_TYPE in self.coordinator.data:
-            return self.coordinator.data[SENSOR_NETWORK_TYPE]
-        return None
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return "mdi:network"
-
-
-class ZyxelCellIdSensor(ZyxelSensorBase):
-    """Representation of a Zyxel NR7101 cell ID sensor."""
-
-    _sensor_type = SENSOR_CELL_ID
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return "Zyxel NR7101 Cell ID"
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        if self.coordinator.data and SENSOR_CELL_ID in self.coordinator.data:
-            return self.coordinator.data[SENSOR_CELL_ID]
-        return None
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return "mdi:cell-tower"

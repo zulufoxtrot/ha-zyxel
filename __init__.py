@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from nr7101 import nr7101  # Import the correct module/class
+from nr7101 import nr7101
 
 from .const import (
     CONF_HOST,
@@ -33,11 +33,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         # Create router instance
-        # Note: Adjusting based on actual library usage
         router = nr7101.NR7101(host, username, password)
 
-        # Test connection
-        await hass.async_add_executor_job(router.login)
+        # Test that we can get data
+        data = await hass.async_add_executor_job(router.get_data)
+        if not data:
+            raise Exception("No data received from router")
+
     except Exception as ex:
         _LOGGER.error("Could not connect to Zyxel NR7101 router: %s", ex)
         raise ConfigEntryNotReady from ex
@@ -48,30 +50,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with async_timeout.timeout(30):
                 # Note: This uses a synchronous library in an async context
                 # We use async_add_executor_job for blocking calls
-                data = {}
-
-                # Login to get session
-                await hass.async_add_executor_job(router.login)
-
-                try:
-                    # Get signal status (including RSSI)
-                    signal_status = await hass.async_add_executor_job(router.get_signal_status)
-                    if signal_status:
-                        data["rssi"] = signal_status.get("rssi")
-                        data["signal_strength"] = signal_status.get("signalStrength")
-                        data["cell_id"] = signal_status.get("cellId")
-                        data["connection_status"] = signal_status.get("status")
-                        data["network_type"] = signal_status.get("networkType")
-
-                    # Get device information
-                    device_info = await hass.async_add_executor_job(router.get_device_info)
-                    if device_info:
-                        data["firmware_version"] = device_info.get("firmwareVersion")
-                        data["model"] = device_info.get("modelName")
-                finally:
-                    # Always logout to clean up session
-                    await hass.async_add_executor_job(router.logout)
-
+                data = await hass.async_add_executor_job(router.get_data)
+                if not data:
+                    raise UpdateFailed("No data received from router")
                 return data
         except Exception as err:
             raise UpdateFailed(f"Error communicating with router: {err}") from err
@@ -111,8 +92,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     )
     if unload_ok:
-        router = hass.data[DOMAIN][entry.entry_id]["router"]
-        await hass.async_add_executor_job(router.logout)
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
