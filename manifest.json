@@ -1,0 +1,11 @@
+{
+    "domain": "zyxel_nr7101",
+    "name": "Zyxel NR7101",
+    "documentation": "https://github.com/zulufoxtrot/ha-zyxel-nr7101",
+    "dependencies": [],
+    "codeowners": ["@zulufoxtrot"],
+    "requirements": ["nr7101@git+https://github.com/pkorpine/nr7101.git"],
+    "config_flow": true,
+    "iot_class": "local_polling",
+    "version": "0.1.0"
+}

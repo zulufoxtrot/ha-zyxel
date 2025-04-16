@@ -1,0 +1,3 @@
+# requirements.txt
+nr7101==0.0.1
+voluptuous>=0.12.0
