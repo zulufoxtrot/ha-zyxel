@@ -34,7 +34,7 @@ async def validate_input(hass: core.HomeAssistant, data):
         )
 
         # Test that we can get data
-        test_data = await hass.async_add_executor_job(router.get_data)
+        test_data = await hass.async_add_executor_job(router.get_status)
         if not test_data:
             raise Exception("No data received from router")
 

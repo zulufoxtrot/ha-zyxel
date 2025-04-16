@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         router = nr7101.NR7101(host, username, password)
 
         # Test that we can get data
-        data = await hass.async_add_executor_job(router.get_data)
+        data = await hass.async_add_executor_job(router.get_status)
         if not data:
             raise Exception("No data received from router")
 
@@ -50,7 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with async_timeout.timeout(30):
                 # Note: This uses a synchronous library in an async context
                 # We use async_add_executor_job for blocking calls
-                data = await hass.async_add_executor_job(router.get_data)
+                data = await hass.async_add_executor_job(router.get_status)
                 if not data:
                     raise UpdateFailed("No data received from router")
                 return data
