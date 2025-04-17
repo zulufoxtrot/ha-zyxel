@@ -1,5 +1,4 @@
-# custom_components/zyxel_nr7101/__init__.py
-"""The Zyxel NR7101 integration."""
+"""The Zyxel integration."""
 import asyncio
 import logging
 from datetime import timedelta
@@ -26,7 +25,7 @@ PLATFORMS = ["sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Zyxel NR7101 from a config entry."""
+    """Set up Zyxel integration from a config entry."""
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
@@ -41,7 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise Exception("No data received from router")
 
     except Exception as ex:
-        _LOGGER.error("Could not connect to Zyxel NR7101 router: %s", ex)
+        _LOGGER.error("Could not connect to Zyxel router: %s", ex)
         raise ConfigEntryNotReady from ex
 
     async def async_update_data():

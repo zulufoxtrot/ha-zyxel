@@ -1,5 +1,4 @@
-# custom_components/zyxel_nr7101/sensor.py
-"""Support for Zyxel NR7101 sensors."""
+"""Support for Zyxel device sensors."""
 from __future__ import annotations
 
 import logging
@@ -25,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 # Define some known sensor types for proper configuration
 SIGNAL_SENSORS = {
     "rssi": {
-        "name": "RSSI",
+        "name": "INTF_RSSI",
         "unit": "dBm",
         "icon": "mdi:signal",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
@@ -65,11 +64,11 @@ SIGNAL_SENSORS = {
 async def async_setup_entry(
         hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the Zyxel NR7101 sensors."""
+    """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     if not coordinator.data:
-        _LOGGER.error("No data received from Zyxel NR7101")
+        _LOGGER.error("No data received from Zyxel device")
         return
 
     sensors = []
@@ -125,7 +124,7 @@ def _is_value_scalar(value: Any) -> bool:
 
 
 class ZyxelSensorBase(CoordinatorEntity):
-    """Base class for Zyxel NR7101 sensors."""
+    """Base class for Zyxel device sensors."""
 
     def __init__(self, coordinator, entry, key):
         """Initialize the sensor."""
@@ -134,9 +133,9 @@ class ZyxelSensorBase(CoordinatorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel NR7101 ({entry.data['host']})",
+            name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="NR7101",
+            model="",
         )
 
     @property
@@ -162,13 +161,13 @@ class ZyxelSensorBase(CoordinatorEntity):
 
 
 class ZyxelConfiguredSensor(ZyxelSensorBase):
-    """Representation of a configured Zyxel NR7101 sensor."""
+    """Representation of a configured Zyxel sensor."""
 
     def __init__(self, coordinator, entry, key, config):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
-        self._attr_name = f"Zyxel NR7101 {config['name']}"
+        self._attr_name = f"Zyxel {config['name']}"
         self._attr_unit_of_measurement = config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = config["device_class"]
@@ -184,13 +183,13 @@ class ZyxelConfiguredSensor(ZyxelSensorBase):
 
 
 class ZyxelGenericSensor(ZyxelSensorBase):
-    """Representation of a generic Zyxel NR7101 sensor."""
+    """Representation of a generic Zyxel sensor."""
 
     @property
     def name(self):
         """Return the name of the sensor."""
         name_parts = self._key.split(".")
-        return f"Zyxel NR7101 {'.'.join(name_parts)}"
+        return f"Zyxel {'.'.join(name_parts)}"
 
     @property
     def state(self):

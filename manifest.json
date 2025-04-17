@@ -1,7 +1,7 @@
 {
-    "domain": "zyxel_nr7101",
-    "name": "Zyxel NR7101",
-    "documentation": "https://github.com/zulufoxtrot/ha-zyxel-nr7101",
+    "domain": "ha-zyxel",
+    "name": "Zyxel",
+    "documentation": "https://github.com/zulufoxtrot/ha-zyxel",
     "dependencies": [],
     "codeowners": ["@zulufoxtrot"],
     "requirements": ["nr7101@git+https://github.com/pkorpine/nr7101.git"],

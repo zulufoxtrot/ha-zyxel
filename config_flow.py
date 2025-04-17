@@ -1,5 +1,4 @@
-# custom_components/zyxel_nr7101/config_flow.py
-"""Config flow for Zyxel NR7101 integration."""
+"""Config flow for Zyxel integration."""
 import logging
 
 import voluptuous as vol
@@ -39,15 +38,15 @@ async def validate_input(hass: core.HomeAssistant, data):
             raise Exception("No data received from router")
 
     except Exception as ex:
-        _LOGGER.error("Unable to connect to Zyxel NR7101: %s", ex)
+        _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
         raise CannotConnect from ex
 
     # Return info that you want to store in the config entry.
-    return {"title": f"Zyxel NR7101 ({data[CONF_HOST]})"}
+    return {"title": f"Zyxel device ({data[CONF_HOST]})"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Zyxel NR7101."""
+    """Handle a config flow for Zyxel devices."""
 
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL

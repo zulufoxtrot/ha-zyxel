@@ -1,7 +1,5 @@
-"""Constants for the Zyxel NR7101 integration."""
-
-DOMAIN = "zyxel_nr7101"
-DEFAULT_NAME = "Zyxel NR7101"
+DOMAIN = "ha-zyxel"
+DEFAULT_NAME = "Zyxel Device"
 DEFAULT_HOST = "https://192.168.1.1"
 DEFAULT_USERNAME = "admin"
 DEFAULT_SCAN_INTERVAL = 30
