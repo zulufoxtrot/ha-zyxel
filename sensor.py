@@ -23,6 +23,13 @@ _LOGGER = logging.getLogger(__name__)
 
 # Define some known sensor types for proper configuration
 SIGNAL_SENSORS = {
+    "INTF_RSSI": {
+        "name": "Cellular RSSI",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
     "zyxel_cellular_intf_rssi": {
         "name": "Cellular RSSI",
         "unit": "dBm",
