@@ -33,14 +33,14 @@ SIGNAL_SENSORS = {
     "INTF_PhyCell_ID": {
         "name": "Physical Cell ID",
         "unit": None,
-        "icon": "mdi:cell-tower",
+        "icon": "mdi:antenna",
         "device_class": None,
         "state_class": None,
     },
     "INTF_SINR": {
         "name": "Cellular Signal-to-Noise Ratio",
         "unit": "dB",
-        "icon": "mdi:cell-tower",
+        "icon": "mdi:signal",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
     },
