@@ -23,38 +23,17 @@ _LOGGER = logging.getLogger(__name__)
 
 # Define some known sensor types for proper configuration
 SIGNAL_SENSORS = {
-    "rssi": {
-        "name": "INTF_RSSI",
+    "zyxel_cellular_intf_rssi": {
+        "name": "Cellular RSSI",
         "unit": "dBm",
         "icon": "mdi:signal",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
     },
-    "signalStrength": {
-        "name": "Signal Strength",
-        "unit": "%",
-        "icon": "mdi:signal",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "cellId": {
-        "name": "Cell ID",
+    "zyxel_cellular_intf_phycell_id": {
+        "name": "Physical Cell ID",
         "unit": None,
         "icon": "mdi:cell-tower",
-        "device_class": None,
-        "state_class": None,
-    },
-    "connectionStatus": {
-        "name": "Connection Status",
-        "unit": None,
-        "icon": "mdi:router-wireless",
-        "device_class": None,
-        "state_class": None,
-    },
-    "networkType": {
-        "name": "Network Type",
-        "unit": None,
-        "icon": "mdi:network",
         "device_class": None,
         "state_class": None,
     },
