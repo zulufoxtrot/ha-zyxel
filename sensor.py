@@ -30,19 +30,19 @@ SIGNAL_SENSORS = {
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
     },
-    "zyxel_cellular_intf_rssi": {
-        "name": "Cellular RSSI",
-        "unit": "dBm",
-        "icon": "mdi:signal",
-        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "zyxel_cellular_intf_phycell_id": {
+    "INTF_PhyCell_ID": {
         "name": "Physical Cell ID",
         "unit": None,
         "icon": "mdi:cell-tower",
         "device_class": None,
         "state_class": None,
+    },
+    "INTF_SINR": {
+        "name": "Cellular Signal-to-Noise Ratio",
+        "unit": "dB",
+        "icon": "mdi:cell-tower",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
     },
 }
 
