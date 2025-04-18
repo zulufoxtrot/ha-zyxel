@@ -44,6 +44,20 @@ SIGNAL_SENSORS = {
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
     },
+    "BytesSent": {
+        "name": "Bytes Sent",
+        "unit": "B",
+        "icon": "mdi:numeric-10-box",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "BytesReceived": {
+        "name": "Bytes Received",
+        "unit": "B",
+        "icon": "mdi:numeric-10-box",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
 }
 
 
