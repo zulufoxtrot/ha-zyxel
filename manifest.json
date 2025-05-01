@@ -1,5 +1,5 @@
 {
-    "domain": "ha-zyxel",
+    "domain": "ha_zyxel",
     "name": "Zyxel",
     "documentation": "https://github.com/zulufoxtrot/ha-zyxel",
     "issue_tracker": "https://github.com/zulufoxtrot/ha-zyxel/issues",

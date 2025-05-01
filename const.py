@@ -1,4 +1,4 @@
-DOMAIN = "ha-zyxel"
+DOMAIN = "ha_zyxel"
 DEFAULT_NAME = "Zyxel Device"
 DEFAULT_HOST = "https://192.168.1.1"
 DEFAULT_USERNAME = "admin"
