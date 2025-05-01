@@ -2,6 +2,7 @@
     "domain": "ha-zyxel",
     "name": "Zyxel",
     "documentation": "https://github.com/zulufoxtrot/ha-zyxel",
+    "issue_tracker": "https://github.com/zulufoxtrot/ha-zyxel/issues",
     "dependencies": [],
     "codeowners": ["@zulufoxtrot"],
     "requirements": ["nr7101@git+https://github.com/pkorpine/nr7101.git"],
