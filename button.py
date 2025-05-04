@@ -29,20 +29,14 @@ class ZyxelRebootButton(ButtonEntity):
         """Initialize the button."""
         self._router = router
         self._attr_unique_id = f"{entry.entry_id}_reboot"
-        # The name will be fetched from translations
-        self._attr_has_entity_name = True
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="", # Consider fetching model if available
+            model="", 
         )
         self._attr_icon = "mdi:restart"
-
-    @property
-    def translation_key(self) -> str:
-        """Return the translation key for the button name."""
-        return "reboot_button"
+        self._attr_name = "Zyxel Reboot Device"
 
     async def async_press(self) -> None:
         """Handle the button press."""
