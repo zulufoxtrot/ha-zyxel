@@ -17,5 +17,12 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "entity": {
+    "button": {
+      "reboot_button": {
+        "name": "Reboot Device"
+      }
+    }
   }
 }
