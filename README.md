@@ -1,12 +1,12 @@
 # ha-zyxel
 
-<img src="resources/logo.png" alt="Zyxel Logo" width="128"/>
+<img src="https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/logo.png" alt="Zyxel Logo" width="128"/>
 
 
 __Home Assistant integration for Zyxel devices__
 
 
-<img src="resources/screenshot.png" alt="Zyxel Logo" />
+<img src="https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/screenshot.png" alt="Zyxel Logo" />
 
 
 ## Supported devices
