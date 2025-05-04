@@ -14,6 +14,7 @@ __Home Assistant integration for Zyxel devices__
 Confirmed working on:
 
 - NR7101
+- NR7302
 
 Potentially compatible with a lot more devices.
 
