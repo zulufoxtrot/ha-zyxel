@@ -37,12 +37,54 @@ SIGNAL_SENSORS = {
         "device_class": None,
         "state_class": None,
     },
+    "INTF_RSRP": {
+        "name": "Cellular Reference Signal Received Power",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_RSRQ": {
+        "name": "Cellular Reference Signal Received Quality",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
     "INTF_SINR": {
         "name": "Cellular Signal-to-Noise Ratio",
         "unit": "dB",
         "icon": "mdi:signal",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "NSA_PhyCellID": {
+        "name": "NSA Physical Cell ID",
+        "unit": None,
+        "icon": "mdi:antenna",
+        "device_class": None,
+        "state_class": None,
+    },
+    "NSA_RSRP": {
+        "name": "NSA Reference Signal Received Power",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "NSA_RSRQ": {
+        "name": "NSA Reference Signal Received Quality",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "NSA_SINR": {
+        "name": "NSA Signal-to-Noise Ratio",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
     },
     "BytesSent": {
         "name": "Bytes Sent",
