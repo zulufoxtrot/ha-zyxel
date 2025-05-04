@@ -46,5 +46,3 @@ class ZyxelRebootButton(ButtonEntity):
             _LOGGER.info("Zyxel device reboot command sent successfully")
         except Exception as err:
             _LOGGER.error("Failed to send reboot command: %s", err)
-            # Optionally, raise an exception or notify the user
-            # raise HomeAssistantError(f"Failed to reboot: {err}") from err
