@@ -22,7 +22,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 # Define some known sensor types for proper configuration
-SIGNAL_SENSORS = {
+KNOWN_SENSORS = {
     "INTF_RSSI": {
         "name": "Cellular RSSI",
         "unit": "dBm",
@@ -151,12 +151,12 @@ async def async_setup_entry(
             continue
 
         # Check if this is a known sensor type
-        sensor_config = SIGNAL_SENSORS.get(key.split(".")[-1], None)
+        sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
 
         if sensor_config:
             # Create a configured sensor for known types
             sensors.append(
-                ZyxelConfiguredSensor(
+                ConfiguredZyxelSensor(
                     coordinator,
                     entry,
                     key,
@@ -166,7 +166,7 @@ async def async_setup_entry(
         else:
             # Create a generic sensor for unknown types
             sensors.append(
-                ZyxelGenericSensor(
+                GenericZyxelSensor(
                     coordinator,
                     entry,
                     key
@@ -193,7 +193,7 @@ def _is_value_scalar(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
-class ZyxelSensorBase(CoordinatorEntity):
+class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
     def __init__(self, coordinator, entry, key):
@@ -230,7 +230,7 @@ class ZyxelSensorBase(CoordinatorEntity):
         return value
 
 
-class ZyxelConfiguredSensor(ZyxelSensorBase):
+class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
     def __init__(self, coordinator, entry, key, config):
@@ -252,7 +252,7 @@ class ZyxelConfiguredSensor(ZyxelSensorBase):
             return None
 
 
-class ZyxelGenericSensor(ZyxelSensorBase):
+class GenericZyxelSensor(AbstractZyxelSensor):
     """Representation of a generic Zyxel sensor."""
 
     @property
