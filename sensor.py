@@ -238,7 +238,7 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         super().__init__(coordinator, entry, key)
         self._config = config
         self._attr_name = f"Zyxel {config['name']}"
-        self._attr_unit_of_measurement = config["unit"]
+        self._attr_native_unit_of_measurement = config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = config["device_class"]
         self._attr_state_class = config["state_class"]
