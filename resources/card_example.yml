@@ -42,26 +42,26 @@
     secondary: Current access technology
     tap_action:
       action: more-info
-    entity: sensor.zyxel_traffic_wwan0_bytessent
+    entity: sensor.zyxel_bytes_sent_2
     icon_color: blue
   - type: custom:mushroom-template-card
     primary: >
-      {{ (states('sensor.zyxel_traffic_wwan0_bytesreceived') | int / 1000 / 1000
-      / 1000) | round(1) }} GB
+      {{ (states('sensor.zyxel_bytes_received_2') | int / 1000 / 1000 /
+      1000) | round(1) }} GB
     icon: mdi:download-network
     secondary: Received
     tap_action:
       action: more-info
-    entity: sensor.zyxel_traffic_wwan0_bytesreceived
+    entity: sensor.zyxel_bytes_received_2
   - type: entity
-    entity: sensor.zyxel_cellular_intf_sinr
+    entity: sensor.zyxel_cellular_signal_to_noise_ratio
     name: Cell Signal-To-Noise
   - type: custom:mushroom-template-card
     primary: >
-      {{ (states('sensor.zyxel_traffic_wwan0_bytessent') | int / 1000 / 1000 /
+      {{ (states('sensor.zyxel_bytes_sent_2') | int / 1000 / 1000 /
       1000) | round(1) }} GB
     icon: mdi:upload-network
     secondary: Sent
     tap_action:
       action: more-info
-    entity: sensor.zyxel_traffic_wwan0_bytessent
+    entity: sensor.zyxel_bytes_sent_2

@@ -46,13 +46,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update_data():
         """Fetch data from the router."""
         try:
-            async with async_timeout.timeout(30):
-                # Note: This uses a synchronous library in an async context
-                # We use async_add_executor_job for blocking calls
-                data = await hass.async_add_executor_job(router.get_status)
-                if not data:
-                    raise UpdateFailed("No data received from router")
-                return data
+            async with async_timeout.timeout(5):
+                # Put all blocking operations in a single executor job
+                def get_all_data():
+                    data = router.get_status()
+                    if not data:
+                        raise UpdateFailed("No data received from router")
+                    # Get device info in the same executor job
+                    data["device_info"] = router.get_json_object("status")
+                    return data
+
+                # Execute all blocking operations together
+                return await hass.async_add_executor_job(get_all_data)
         except Exception as err:
             raise UpdateFailed(f"Error communicating with router: {err}") from err
 
