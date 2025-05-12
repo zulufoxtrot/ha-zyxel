@@ -2,5 +2,5 @@
     "name": "Zyxel",
     "homeassistant": "2025.2.4",
     "hacs": "2.0.1",
-    "content_in_root": true
+    "content_in_root": false
 }

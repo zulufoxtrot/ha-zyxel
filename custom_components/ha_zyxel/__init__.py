@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from nr7101 import nr7101
 
-from .const import (
+from custom_components.ha_zyxel.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_USERNAME,
@@ -56,7 +56,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     data["device_info"] = router.get_json_object("status")
                     return data
 
-                # Execute all blocking operations together
                 return await hass.async_add_executor_job(get_all_data)
         except Exception as err:
             raise UpdateFailed(f"Error communicating with router: {err}") from err
