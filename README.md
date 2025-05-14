@@ -15,6 +15,7 @@ Confirmed working on:
 
 - LTE7490-M904
 - NR5103v2
+- NR5307
 - NR7101
 - NR7302
 
