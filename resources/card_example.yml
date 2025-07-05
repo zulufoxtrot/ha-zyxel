@@ -1,12 +1,30 @@
+type: grid
+cards:
   - type: heading
     icon: mdi:antenna
     heading: Antenna
     heading_style: title
   - type: custom:mushroom-template-card
-    entity: sensor.zyxel_cellular_intf_rssi
-    primary: Signal
+    entity: sensor.zyxel_cellular_rssi
+    primary: |
+      {% set rssi = states('sensor.zyxel_cellular_rssi') | int(999) %}
+      {% if rssi == 999 %}
+        Great
+      {% elif rssi >= -77 %}
+        Very Good
+      {% elif rssi >= -86 %}
+        Good
+      {% elif rssi >= -92 %}
+        OK
+      {% elif rssi >= -101 %}
+        Bad
+      {% elif rssi >= -108 %}
+        Very Bad
+      {% else %}
+        Unknown
+      {% endif %}
     icon: |
-      {% set rssi = states('sensor.zyxel_cellular_intf_rssi') | int(999) %}
+      {% set rssi = states('sensor.zyxel_cellular_rssi') | int(999) %}
       {% if rssi == 999 %}
         mdi:signal-cellular-outline
       {% elif rssi >= -77 %}
@@ -23,7 +41,7 @@
         mdi:signal-cellular-outline
       {% endif %}
     icon_color: |
-      {% set rssi = states('sensor.zyxel_cellular_intf_rssi') | int(999) %}
+      {% set rssi = states('sensor.zyxel_cellular_rssi') | int(999) %}
       {% if rssi == 999 %}
         grey
       {% elif rssi >= -86 %}
@@ -33,35 +51,69 @@
       {% else %}
         red
       {% endif %}
-  - type: entity
-    entity: sensor.zyxel_cellular_intf_rssi
-    name: Cell RSSI
+    secondary: Signal
+    tap_action:
+      action: more-info
+  - type: custom:mushroom-entity-card
+    entity: sensor.zyxel_cellular_signal_to_noise_ratio
+    name: Cell Signal-To-Noise
+    primary_info: state
+    secondary_info: name
   - type: custom:mushroom-template-card
     primary: "{{ states('sensor.zyxel_cellular_intf_current_access_technology') }}"
     icon: mdi:signal-5g
     secondary: Current access technology
     tap_action:
       action: more-info
-    entity: sensor.zyxel_bytes_sent_2
+    entity: sensor.zyxel_cellular_intf_current_access_technology
     icon_color: blue
+  - type: custom:mushroom-entity-card
+    entity: sensor.zyxel_cellular_rssi
+    name: Cell RSSI
+    primary_info: state
+    secondary_info: name
   - type: custom:mushroom-template-card
     primary: >
-      {{ (states('sensor.zyxel_bytes_received_2') | int / 1000 / 1000 /
-      1000) | round(1) }} GB
+      {{ (states('sensor.zyxel_bytes_received_2') | int / 1000 / 1000 / 1000) |
+      round(1) }} GB
     icon: mdi:download-network
     secondary: Received
     tap_action:
       action: more-info
     entity: sensor.zyxel_bytes_received_2
-  - type: entity
-    entity: sensor.zyxel_cellular_signal_to_noise_ratio
-    name: Cell Signal-To-Noise
+    icon_color: blue
   - type: custom:mushroom-template-card
     primary: >
-      {{ (states('sensor.zyxel_bytes_sent_2') | int / 1000 / 1000 /
-      1000) | round(1) }} GB
+      {% set seconds = states('sensor.zyxel_device_info_deviceinfo_uptime') |
+      int %}
+
+      {% set minutes = seconds // 60 %}
+
+      {% set hours = minutes // 60 %}
+
+      {% set days = hours // 24 %}
+
+
+      {% if days > 0 %}
+        {{ days | int }} days
+      {% elif hours > 0 %}
+        {{ hours | int }} hours
+      {% else %}
+        {{ minutes | int }} minutes
+      {% endif %}
+    secondary: Uptime
+    icon: mdi:clock
+    entity: sensor.zyxel_device_info_deviceinfo_uptime
+    icon_color: blue
+    tap_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: >
+      {{ (states('sensor.zyxel_bytes_sent_2') | int / 1000 / 1000 / 1000) |
+      round(1) }} GB
     icon: mdi:upload-network
     secondary: Sent
     tap_action:
       action: more-info
     entity: sensor.zyxel_bytes_sent_2
+    icon_color: orange

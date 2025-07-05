@@ -20,6 +20,7 @@ Confirmed working on:
 - NR7101
 - NR7302
 - FWA505
+- FWA510
 
 Potentially compatible with a lot more devices.
 If you do test and find out your device is working, please submit an issue or a pull request and I'll add it to the list.
