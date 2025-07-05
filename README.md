@@ -19,10 +19,17 @@ Confirmed working on:
 - NR5307
 - NR7101
 - NR7302
+- FWA505
 
 Potentially compatible with a lot more devices.
-
 If you do test and find out your device is working, please submit an issue or a pull request and I'll add it to the list.
+
+## Unsupported devices / known issues
+
+- EX3301-TO: https://github.com/zulufoxtrot/ha-zyxel/issues/14
+- EX5601-T0: https://github.com/zulufoxtrot/ha-zyxel/issues/11
+- EX5601-T1: https://github.com/zulufoxtrot/ha-zyxel/issues/16
+- NWA50AX: https://github.com/zulufoxtrot/ha-zyxel/issues/15
 
 ## Installation
 
@@ -56,14 +63,19 @@ Prerequisites:
 2. Click Add Integration.
 3. Search for Zyxel.
 4. Select the Zyxel integration.
-5. In Host, type your hostname IP, usually something like 192.168.1.1 (note: enter the full URL scheme with http://)
+5. In Host, type your hostname IP, usually something like 192.168.1.1 (note: enter the full URL scheme with https://)
 6. Type your admin username and password
 7. Click Submit.
 
+If connection fails, try with http:// instead of https://.
+
 ## Adding cards to your dashboard
 
-Add [this code](resources/card_example.yml) to your dashboard to add the cards pictured above.
+Add [this code](resources/card_example.yml) to your dashboard to add the cards pictured above. Follow the instructions from the animation below.
+
 Note: the Mushroom card extension is required for the above code to work.
+
+![](resources/import_demo.gif)
 
 ## Available entities
 
