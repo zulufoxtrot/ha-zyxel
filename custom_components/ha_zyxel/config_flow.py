@@ -22,7 +22,7 @@ DATA_SCHEMA = vol.Schema(
 
 
 async def validate_input(hass: core.HomeAssistant, data):
-    """Validate the user input allows us to connect.
+    """Validate that the user input allows us to connect.
 
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
@@ -35,14 +35,14 @@ async def validate_input(hass: core.HomeAssistant, data):
         # Test that we can get data
         test_data = await hass.async_add_executor_job(router.get_status)
         if not test_data:
-            raise Exception("No data received from router")
+            raise Exception("Connection/authentication failed.")
 
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
-        raise CannotConnect from ex
+        raise ConnectionError from ex
 
     # Return info that you want to store in the config entry.
-    return {"title": f"Zyxel device ({data[CONF_HOST]})"}
+    return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -54,21 +54,42 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
+        success = False
+
         if user_input is not None:
+            host = user_input[CONF_HOST]
+
+            # sanitize entry
+            if not host.startswith("http://") and not host.startswith("https://"):
+                host = f"https://{host}"
+                user_input[CONF_HOST] = host
+
             try:
                 info = await validate_input(self.hass, user_input)
-
-                return self.async_create_entry(title=info["title"], data=user_input)
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
+                success = True
+            except Exception as e:  # pylint: disable=broad-except
+                _LOGGER.exception("First attempt failed", e)
                 errors["base"] = "unknown"
 
-        return self.async_show_form(
-            step_id="user", data_schema=DATA_SCHEMA, errors=errors
-        )
+        if not success and "https" not in user_input["host"]:
+            _LOGGER.info("User specified http but it failed, trying https...")
+            user_input["host"] = user_input["host"].replace("http://", "https://")
+            try:
+                info = await validate_input(self.hass, user_input)
+                success = True
+            except ConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception as e:  # pylint: disable=broad-except
+                _LOGGER.exception("Second attempt failed", e)
+                errors["base"] = "unknown"
+
+        if success:
+            return self.async_create_entry(title=info["title"], data=user_input)
+        else:
+            return self.async_show_form(
+                step_id="user", data_schema=DATA_SCHEMA, errors=errors
+            )
 
 
-class CannotConnect(exceptions.HomeAssistantError):
+class ConnectionError(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect."""
