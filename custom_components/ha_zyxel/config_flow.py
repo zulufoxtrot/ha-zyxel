@@ -71,17 +71,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("First attempt failed", e)
                 errors["base"] = "unknown"
 
-        if not success and "https" not in user_input["host"]:
-            _LOGGER.info("User specified http but it failed, trying https...")
-            user_input["host"] = user_input["host"].replace("http://", "https://")
-            try:
-                info = await validate_input(self.hass, user_input)
-                success = True
-            except ConnectionError:
-                errors["base"] = "cannot_connect"
-            except Exception as e:  # pylint: disable=broad-except
-                _LOGGER.exception("Second attempt failed", e)
-                errors["base"] = "unknown"
+            if not success and "https" not in user_input["host"]:
+                _LOGGER.info("User specified http but it failed, trying https...")
+                user_input["host"] = user_input["host"].replace("http://", "https://")
+                try:
+                    info = await validate_input(self.hass, user_input)
+                    success = True
+                except ConnectionError:
+                    errors["base"] = "cannot_connect"
+                except Exception as e:  # pylint: disable=broad-except
+                    _LOGGER.exception("Second attempt failed", e)
+                    errors["base"] = "unknown"
 
         if success:
             return self.async_create_entry(title=info["title"], data=user_input)
