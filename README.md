@@ -15,6 +15,7 @@ __Home Assistant integration for Zyxel devices__
 Confirmed working on:
 
 - LTE7490-M904
+- LTE5398-M904
 - NR5103v2
 - NR5307
 - NR7101
