@@ -121,6 +121,27 @@ KNOWN_SENSORS = {
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT
     },
+    "X_ZYXEL_TEMPERATURE_AMBIENT": {
+        "name": "Ambient Temperature",
+        "unit": "°C",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "X_ZYXEL_TEMPERATURE_SDX": {
+        "name": "SDX Temperature",
+        "unit": "°C",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "X_ZYXEL_TEMPERATURE_CPU0": {
+        "name": "CPU Temperature",
+        "unit": "°C",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
     "BytesSent": {
         "name": "Bytes Sent",
         "unit": "B",
