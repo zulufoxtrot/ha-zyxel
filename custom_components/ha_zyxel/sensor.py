@@ -107,6 +107,13 @@ KNOWN_SENSORS = {
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT
     },
+    "NSA_RSSI": {
+        "name": "NSA Reference Signal Strength Indicator",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
     "NSA_SINR": {
         "name": "NSA Signal-to-Noise Ratio",
         "unit": "dB",
