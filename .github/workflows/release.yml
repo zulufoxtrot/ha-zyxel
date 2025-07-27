@@ -20,32 +20,32 @@ jobs:
       with:
         fetch-depth: 0  # Required for tagging and version history
 
-    - name: Setting up Node
-      uses: actions/setup-node@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        node-version: '18.x'
+        python-version: '3.10'
 
-    - name: Preparing release
+    - name: Install dependencies
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        npm install
-        npm run release
-        echo "PACKAGE_VERSION=$(node -p -e "require('./package.json').version")" >> $GITHUB_ENV
-      env:
-        CI: true
+        python -m pip install --upgrade pip
+        pip install setuptools wheel
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Push to main
-      uses: ad-m/github-push-action@v0.6.0
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Extract version from manifest
+      id: version
+      run: |
+        # Extract version from manifest.json
+        VERSION=$(grep -o '"version": "[^"]*' custom_components/ha_zyxel/manifest.json | cut -d'"' -f4)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Version extracted: $VERSION"
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ env.PACKAGE_VERSION }}
-        name: ${{ env.PACKAGE_VERSION }}
+        tag_name: v${{ env.VERSION }}
+        name: v${{ env.VERSION }}
         draft: false
         prerelease: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
