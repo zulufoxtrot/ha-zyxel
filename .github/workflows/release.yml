@@ -1,4 +1,4 @@
-name: Release HA component
+name: Release HA Component
 
 on:
   workflow_run:

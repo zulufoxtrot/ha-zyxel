@@ -2,7 +2,7 @@ name: HACS Validation
 
 on:
   workflow_run:
-    workflows: ["Hassfest Validation"]  # Must match the name of the second workflow
+    workflows: ["Hassfest validation"]  # Must match the name of the second workflow
     types:
       - completed
 
