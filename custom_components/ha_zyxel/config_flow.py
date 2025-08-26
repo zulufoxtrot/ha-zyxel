@@ -28,8 +28,11 @@ async def validate_input(hass: core.HomeAssistant, data):
     """
     try:
         # Create router instance and test connection
-        router = nr7101.NR7101(
-            data[CONF_HOST], data[CONF_USERNAME], data[CONF_PASSWORD]
+        router = await hass.async_add_executor_job(
+            nr7101.NR7101,
+            data[CONF_HOST],
+            data[CONF_USERNAME],
+            data[CONF_PASSWORD]
         )
 
         # Test that we can get data

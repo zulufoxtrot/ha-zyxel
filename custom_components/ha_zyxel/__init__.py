@@ -32,7 +32,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         # Create router instance
-        router = nr7101.NR7101(host, username, password)
+        router = await hass.async_add_executor_job(
+            nr7101.NR7101,
+            host,
+            username,
+            password)
 
         # Test that we can get data
         data = await hass.async_add_executor_job(router.get_status)
