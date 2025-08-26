@@ -19,6 +19,7 @@ Confirmed working on:
 - NR5103v2
 - NR5307
 - NR7101
+- NR7102
 - NR7302
 - FWA505
 - FWA510

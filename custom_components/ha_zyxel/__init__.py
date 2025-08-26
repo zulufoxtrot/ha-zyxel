@@ -54,6 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         raise UpdateFailed("No data received from router")
                     # Get device info in the same executor job
                     data["device_info"] = router.get_json_object("status")
+                    router.logout()
                     return data
 
                 return await hass.async_add_executor_job(get_all_data)
