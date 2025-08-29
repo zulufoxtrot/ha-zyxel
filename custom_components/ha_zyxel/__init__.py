@@ -19,8 +19,14 @@ from custom_components.ha_zyxel.const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Set nr7101 library logging to INFO level to reduce debug spam
-logging.getLogger("nr7101.nr7101").setLevel(logging.INFO)
+# Completely block nr7101 debug and info logging
+class NR7101LogFilter:
+    def filter(self, record):
+        return record.levelno >= logging.WARNING
+
+nr7101_logger = logging.getLogger("nr7101.nr7101")
+nr7101_logger.setLevel(logging.WARNING)
+nr7101_logger.addFilter(NR7101LogFilter())
 
 try:
     from nr7101 import nr7101

@@ -10,6 +10,15 @@ from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Completely block nr7101 debug and info logging
+class NR7101LogFilter:
+    def filter(self, record):
+        return record.levelno >= logging.WARNING
+
+nr7101_logger = logging.getLogger("nr7101.nr7101")
+nr7101_logger.setLevel(logging.WARNING)
+nr7101_logger.addFilter(NR7101LogFilter())
+
 try:
     from nr7101 import nr7101
     NR7101_AVAILABLE = True
