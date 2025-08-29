@@ -37,8 +37,18 @@ async def validate_input(hass: core.HomeAssistant, data):
             data[CONF_PASSWORD]
         )
 
+        # Check if encryption is required
+        _LOGGER.debug(f"Encryption required: {router.encryption_required}")
+        if router.encryption_required:
+            _LOGGER.debug(f"RSA key available: {'YES' if router.rsa_key else 'NO'}")
+            if router.rsa_key:
+                _LOGGER.debug(f"RSA key length: {len(router.rsa_key)}")
+
         # Test login first
+        _LOGGER.debug("Starting login attempt...")
         login_success = await hass.async_add_executor_job(router.login)
+        _LOGGER.debug(f"Login result: {login_success}")
+
         if not login_success:
             _LOGGER.error("Login failed - check credentials and device compatibility")
             raise Exception("Login failed - check credentials")
