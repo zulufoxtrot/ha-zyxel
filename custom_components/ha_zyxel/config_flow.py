@@ -6,11 +6,22 @@ import voluptuous as vol
 from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
-from nr7101 import nr7101
-
 from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+try:
+    from nr7101 import nr7101
+    NR7101_AVAILABLE = True
+    _LOGGER.debug("Successfully imported nr7101 library")
+except ImportError as e:
+    _LOGGER.error(f"Failed to import nr7101 library: {e}")
+    NR7101_AVAILABLE = False
+    nr7101 = None
+except Exception as e:
+    _LOGGER.error(f"Unexpected error importing nr7101 library: {e}")
+    NR7101_AVAILABLE = False
+    nr7101 = None
 
 DATA_SCHEMA = vol.Schema(
     {
@@ -26,53 +37,71 @@ async def validate_input(hass: core.HomeAssistant, data):
 
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
+
+    # Check if nr7101 library is available
+    if not NR7101_AVAILABLE or nr7101 is None:
+        _LOGGER.error("nr7101 library is not available - check requirements in manifest.json")
+        raise Exception("Required nr7101 library is not installed or failed to import")
+
     try:
         _LOGGER.debug(f"Attempting connection to {data[CONF_HOST]} with username {data[CONF_USERNAME]}")
 
         # Create router instance and test connection
-        router = await hass.async_add_executor_job(
-            nr7101.NR7101,
-            data[CONF_HOST],
-            data[CONF_USERNAME],
-            data[CONF_PASSWORD]
-        )
+        try:
+            _LOGGER.debug(f"Creating NR7101 instance with library: {nr7101}")
+            router = await hass.async_add_executor_job(
+                nr7101.NR7101,
+                data[CONF_HOST],
+                data[CONF_USERNAME],
+                data[CONF_PASSWORD]
+            )
+            _LOGGER.debug(f"Successfully created router instance: {type(router)}")
+        except Exception as init_ex:
+            _LOGGER.error(f"Failed to initialize NR7101 router object: {init_ex}")
+            _LOGGER.error("This might indicate a library version issue or network connectivity problem")
+            _LOGGER.error(f"nr7101 module: {nr7101}")
+            _LOGGER.error(f"Available attributes in nr7101: {dir(nr7101) if nr7101 else 'None'}")
+            raise Exception(f"Router initialization failed: {init_ex}")
 
-        # Check if encryption is required
-        _LOGGER.debug(f"Encryption required: {router.encryption_required}")
-        if router.encryption_required:
-            _LOGGER.debug(f"RSA key available: {'YES' if router.rsa_key else 'NO'}")
-            if router.rsa_key:
-                _LOGGER.debug(f"RSA key length: {len(router.rsa_key)}")
+        # Check if encryption is required (with fallback for older library versions)
+        encryption_required = getattr(router, 'encryption_required', False)
+        rsa_key = getattr(router, 'rsa_key', None)
+        sessionkey = getattr(router, 'sessionkey', None)
+
+        _LOGGER.info(f"Router encryption: {'enabled' if encryption_required else 'disabled'}")
 
         # Test login first
-        _LOGGER.debug("Starting login attempt...")
-        login_success = await hass.async_add_executor_job(router.login)
-        _LOGGER.debug(f"Login result: {login_success}")
+        try:
+            login_success = await hass.async_add_executor_job(router.login)
+        except Exception as login_ex:
+            _LOGGER.error(f"Login failed: {login_ex}")
+            raise Exception(f"Login failed: {login_ex}")
 
         if not login_success:
-            _LOGGER.error("Login failed - check credentials and device compatibility")
+            _LOGGER.error("Login failed - check credentials")
             raise Exception("Login failed - check credentials")
 
+        _LOGGER.info("Login successful")
+
         # Probe available endpoints for debugging
-        _LOGGER.debug("Probing available endpoints...")
-        available_endpoints = await hass.async_add_executor_job(router.probe_available_endpoints)
-        _LOGGER.info(f"Router has {len(available_endpoints)} available endpoints: {available_endpoints}")
+        try:
+            available_endpoints = await hass.async_add_executor_job(router.probe_available_endpoints)
+            _LOGGER.info(f"Router has {len(available_endpoints)} available endpoints")
+        except Exception as probe_ex:
+            _LOGGER.warning(f"Failed to probe endpoints: {probe_ex}")
+            available_endpoints = []
 
-        # Test that we can get some data (try multiple endpoints for different router types)
-        test_data = await hass.async_add_executor_job(router.get_status)
-        if not test_data:
-            _LOGGER.debug("get_status returned no data, trying basic connection test")
-            # Try basic connection test
-            try:
-                await hass.async_add_executor_job(router.connect)
-                _LOGGER.info("Basic connection successful, but no status data available")
-                # For routers without cellular data, we still consider this a success
+        # Test that we can get some data
+        try:
+            test_data = await hass.async_add_executor_job(router.get_status)
+            if test_data:
+                _LOGGER.info("Router data retrieved successfully")
+            else:
+                _LOGGER.warning("No data from router, but connection works")
                 test_data = {"connection": "success"}
-            except Exception as connect_ex:
-                _LOGGER.error(f"Both get_status and connect failed: {connect_ex}")
-                raise Exception("Connection/authentication failed.")
-
-        _LOGGER.debug(f"Connection successful, got data: {type(test_data)} with keys: {list(test_data.keys()) if isinstance(test_data, dict) else 'not a dict'}")
+        except Exception as status_ex:
+            _LOGGER.warning(f"Data retrieval failed: {status_ex}")
+            test_data = {"login": "success"}
 
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)

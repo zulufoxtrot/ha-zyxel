@@ -9,8 +9,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from nr7101 import nr7101
-
 from custom_components.ha_zyxel.const import (
     CONF_HOST,
     CONF_PASSWORD,
@@ -21,27 +19,47 @@ from custom_components.ha_zyxel.const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Set nr7101 library logging to INFO level to reduce debug spam
+logging.getLogger("nr7101.nr7101").setLevel(logging.INFO)
+
+try:
+    from nr7101 import nr7101
+    NR7101_AVAILABLE = True
+    _LOGGER.debug("Successfully imported nr7101 library in __init__.py")
+except ImportError as e:
+    _LOGGER.error(f"Failed to import nr7101 library in __init__.py: {e}")
+    NR7101_AVAILABLE = False
+    nr7101 = None
+except Exception as e:
+    _LOGGER.error(f"Unexpected error importing nr7101 library in __init__.py: {e}")
+    NR7101_AVAILABLE = False
+    nr7101 = None
+
 PLATFORMS = ["sensor", "button"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Zyxel integration from a config entry."""
+    # Check if nr7101 library is available
+    if not NR7101_AVAILABLE or nr7101 is None:
+        _LOGGER.error("nr7101 library is not available in __init__.py - check requirements in manifest.json")
+        raise ConfigEntryNotReady("Required nr7101 library is not installed or failed to import")
+
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
 
     try:
-        # Create router instance
+        # Create router instance (login will be done by first coordinator update)
         router = await hass.async_add_executor_job(
             nr7101.NR7101,
             host,
             username,
             password)
 
-        # Test that we can get data
-        data = await hass.async_add_executor_job(router.get_status)
-        if not data:
-            raise Exception("No data received from router")
+        # Quick validation that we can at least connect to the router
+        # (actual data fetching will be done by the coordinator)
+        _LOGGER.info("Router instance created successfully")
 
     except Exception as ex:
         _LOGGER.error("Could not connect to Zyxel router: %s", ex)
@@ -50,19 +68,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update_data():
         """Fetch data from the router."""
         try:
-            async with async_timeout.timeout(5):
+            async with async_timeout.timeout(15):
                 # Put all blocking operations in a single executor job
                 def get_all_data():
-                    data = router.get_status()
-                    if not data:
-                        raise UpdateFailed("No data received from router")
-                    # Get device info in the same executor job
-                    data["device_info"] = router.get_json_object("status")
-                    router.logout()
-                    return data
+                    try:
+                        # Login first to ensure valid session
+                        login_success = router.login()
+                        if not login_success:
+                            _LOGGER.error("Login failed during data update")
+                            raise UpdateFailed("Login failed during data update")
+
+                        data = router.get_status()
+                        if not data:
+                            _LOGGER.error("No data received from router")
+                            raise UpdateFailed("No data received from router")
+
+                        # Use device info from get_status() if available, otherwise fetch it separately
+                        if "device" not in data or not data["device"]:
+                            data["device_info"] = router.get_json_object("status")
+                        else:
+                            data["device_info"] = data["device"]
+
+                        # Keep session active - don't logout on every update
+                        return data
+
+                    except Exception as e:
+                        _LOGGER.error(f"Error updating router data: {e}")
+                        raise
 
                 return await hass.async_add_executor_job(get_all_data)
+        except asyncio.TimeoutError:
+            _LOGGER.warning("Router data fetch timed out after 15 seconds")
+            raise UpdateFailed("Router data fetch timed out")
         except Exception as err:
+            _LOGGER.error(f"Error communicating with router: {err}")
             raise UpdateFailed(f"Error communicating with router: {err}") from err
 
     coordinator = DataUpdateCoordinator(
