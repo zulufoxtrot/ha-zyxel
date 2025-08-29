@@ -8,7 +8,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/zulufoxtrot/ha-zyxel/issues",
   "requirements": [
-    "nr7101@git+https://github.com/Igglybuff/nr7101.git@d9ce6ba653ff1be2194ffb50aecd0d40d3693e71"
+    "nr7101@git+https://github.com/Igglybuff/nr7101.git@91b73f228a91b8067908c84e2e5168f82e8edc82"
   ],
   "version": "0.2.3"
 }

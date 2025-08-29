@@ -27,6 +27,8 @@ async def validate_input(hass: core.HomeAssistant, data):
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
     try:
+        _LOGGER.debug(f"Attempting connection to {data[CONF_HOST]} with username {data[CONF_USERNAME]}")
+
         # Create router instance and test connection
         router = await hass.async_add_executor_job(
             nr7101.NR7101,
@@ -35,10 +37,32 @@ async def validate_input(hass: core.HomeAssistant, data):
             data[CONF_PASSWORD]
         )
 
-        # Test that we can get data
+        # Test login first
+        login_success = await hass.async_add_executor_job(router.login)
+        if not login_success:
+            _LOGGER.error("Login failed - check credentials and device compatibility")
+            raise Exception("Login failed - check credentials")
+
+        # Probe available endpoints for debugging
+        _LOGGER.debug("Probing available endpoints...")
+        available_endpoints = await hass.async_add_executor_job(router.probe_available_endpoints)
+        _LOGGER.info(f"Router has {len(available_endpoints)} available endpoints: {available_endpoints}")
+
+        # Test that we can get some data (try multiple endpoints for different router types)
         test_data = await hass.async_add_executor_job(router.get_status)
         if not test_data:
-            raise Exception("Connection/authentication failed.")
+            _LOGGER.debug("get_status returned no data, trying basic connection test")
+            # Try basic connection test
+            try:
+                await hass.async_add_executor_job(router.connect)
+                _LOGGER.info("Basic connection successful, but no status data available")
+                # For routers without cellular data, we still consider this a success
+                test_data = {"connection": "success"}
+            except Exception as connect_ex:
+                _LOGGER.error(f"Both get_status and connect failed: {connect_ex}")
+                raise Exception("Connection/authentication failed.")
+
+        _LOGGER.debug(f"Connection successful, got data: {type(test_data)} with keys: {list(test_data.keys()) if isinstance(test_data, dict) else 'not a dict'}")
 
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
