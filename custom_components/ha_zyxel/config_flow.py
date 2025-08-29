@@ -71,7 +71,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
                 success = True
             except Exception as e:  # pylint: disable=broad-except
-                _LOGGER.exception("First attempt failed", e)
+                _LOGGER.exception("First attempt failed: %s", e)
                 errors["base"] = "unknown"
 
             if not success and "https" not in user_input["host"]:
@@ -83,7 +83,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except ConnectionError:
                     errors["base"] = "cannot_connect"
                 except Exception as e:  # pylint: disable=broad-except
-                    _LOGGER.exception("Second attempt failed", e)
+                    _LOGGER.exception("Second attempt failed: %s", e)
                     errors["base"] = "unknown"
 
         if success:
