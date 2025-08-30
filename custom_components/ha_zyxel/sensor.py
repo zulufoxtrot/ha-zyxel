@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,9 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.const import DOMAIN
 
@@ -160,108 +158,87 @@ KNOWN_SENSORS = {
 
 
 async def async_setup_entry(
-        hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     if not coordinator.data:
-        _LOGGER.error("No data received from Zyxel device")
         return
 
     sensors = []
+    processed_keys = set()
 
-    # Process all keys in the JSON and create sensors for them
-    # We'll use a flat structure for simplicity
-    for key, value in _flatten_dict(coordinator.data).items():
-        # Skip non-scalar values
-        if not _is_value_scalar(value):
+    # Efficiently process data and create sensors
+    _process_data_for_sensors(coordinator.data, "", sensors, coordinator, entry, processed_keys)
+
+    if sensors:
+        async_add_entities(sensors)
+
+
+def _process_data_for_sensors(data: dict, prefix: str, sensors: list, coordinator, entry: ConfigEntry, processed_keys: set) -> None:
+    """Process data recursively and create sensors efficiently."""
+    for key, value in data.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+
+        if full_key in processed_keys:
             continue
+        processed_keys.add(full_key)
 
-        # Check if this is a known sensor type
-        sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
+        if isinstance(value, dict):
+            _process_data_for_sensors(value, full_key, sensors, coordinator, entry, processed_keys)
+        elif _is_sensor_value(value):
+            # Check if it's a known sensor type
+            sensor_key = key.split(".")[-1]
 
-        if sensor_config:
-            # Create a configured sensor for known types
-            sensors.append(
-                ConfiguredZyxelSensor(
-                    coordinator,
-                    entry,
-                    key,
-                    sensor_config
-                )
-            )
-        else:
-            # Create a generic sensor for unknown types
-            sensors.append(
-                GenericZyxelSensor(
-                    coordinator,
-                    entry,
-                    key
-                )
-            )
-
-    async_add_entities(sensors)
+            if sensor_key in KNOWN_SENSORS:
+                config = KNOWN_SENSORS[sensor_key]
+                sensors.append(ConfiguredZyxelSensor(coordinator, entry, full_key, config))
+            elif len(str(value)) < 100:  # Only create generic sensors for reasonable values
+                sensors.append(GenericZyxelSensor(coordinator, entry, full_key))
 
 
-def _flatten_dict(d: Dict[str, Any], parent_key: str = "") -> Dict[str, Any]:
-    """Flatten a nested dictionary with dot notation for keys."""
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}.{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(_flatten_dict(v, new_key).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
-
-
-def _is_value_scalar(value: Any) -> bool:
-    """Check if a value is a scalar (string, number, bool)."""
-    return isinstance(value, (str, int, float, bool)) or value is None
+def _is_sensor_value(value: Any) -> bool:
+    """Check if a value should be exposed as a sensor."""
+    return isinstance(value, (str, int, float, bool)) and value is not None
 
 
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
-    def __init__(self, coordinator, entry, key):
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
+        self._key_parts = key.split(".")  # Pre-split for efficiency
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="",
+            model="Router",
         )
 
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        if not self.coordinator.last_update_success:
-            return False
+        return self.coordinator.last_update_success and self._get_value() is not None
 
-        # Check if the key exists in the data
+    def _get_value(self) -> Any:
+        """Get value efficiently using pre-split key parts."""
         try:
-            self._get_value_from_path()
-            return True
-        except (KeyError, AttributeError):
-            return False
-
-    def _get_value_from_path(self) -> Any:
-        """Get a value from nested dictionaries using the flattened key."""
-        keys = self._key.split(".")
-        value = self.coordinator.data
-        for k in keys:
-            value = value[k]
-        return value
+            value = self.coordinator.data
+            for part in self._key_parts:
+                value = value[part]
+            return value
+        except (KeyError, TypeError):
+            return None
 
 
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
-    """Representation of a configured Zyxel sensor."""
+    """Optimized configured Zyxel sensor."""
 
-    def __init__(self, coordinator, entry, key, config):
+    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
@@ -272,32 +249,23 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         self._attr_state_class = config["state_class"]
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
-        try:
-            return self._get_value_from_path()
-        except (KeyError, AttributeError):
-            return None
+        return self._get_value()
 
 
 class GenericZyxelSensor(AbstractZyxelSensor):
-    """Representation of a generic Zyxel sensor."""
+    """Optimized generic Zyxel sensor."""
+
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, key)
+        # Simplified naming
+        name_parts = key.split(".")[-2:] if "." in key else [key]
+        self._attr_name = f"Zyxel {' '.join(name_parts)}"
+        self._attr_icon = "mdi:router-wireless"
 
     @property
-    def name(self):
-        """Return the name of the sensor."""
-        name_parts = self._key.split(".")
-        return f"Zyxel {'.'.join(name_parts)}"
-
-    @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
-        try:
-            return self._get_value_from_path()
-        except (KeyError, AttributeError):
-            return None
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return "mdi:router-wireless"
+        return self._get_value()

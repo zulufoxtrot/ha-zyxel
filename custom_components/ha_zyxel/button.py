@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import logging
-
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,16 +31,14 @@ class ZyxelRebootButton(ButtonEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="", 
+            model="Router",
         )
         self._attr_icon = "mdi:restart"
-        self._attr_name = "Zyxel Reboot Device"
+        self._attr_name = "Zyxel Reboot"
 
     async def async_press(self) -> None:
         """Handle the button press."""
-        _LOGGER.info("Attempting to reboot Zyxel device")
         try:
             await self.hass.async_add_executor_job(self._router.reboot)
-            _LOGGER.info("Zyxel device reboot command sent successfully")
         except Exception as err:
             _LOGGER.error("Failed to send reboot command: %s", err)
