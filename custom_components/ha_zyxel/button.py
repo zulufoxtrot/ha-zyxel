@@ -31,10 +31,10 @@ class ZyxelRebootButton(ButtonEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="Router",
+            model="",
         )
         self._attr_icon = "mdi:restart"
-        self._attr_name = "Zyxel Reboot"
+        self._attr_name = "Zyxel Reboot Device"
 
     async def async_press(self) -> None:
         """Handle the button press."""
