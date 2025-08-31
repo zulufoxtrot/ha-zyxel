@@ -14,13 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
-try:
-    from nr7101 import nr7101
-    NR7101_AVAILABLE = True
-except ImportError:
-    _LOGGER.error("Failed to import nr7101 library - check requirements in manifest.json")
-    NR7101_AVAILABLE = False
-    nr7101 = None
+from nr7101 import nr7101
 
 DATA_SCHEMA = vol.Schema(
     {
@@ -33,9 +27,6 @@ DATA_SCHEMA = vol.Schema(
 
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
-
-    if not NR7101_AVAILABLE or nr7101 is None:
-        raise Exception("Required nr7101 library is not installed or failed to import")
 
     try:
         # Create router instance and test connection

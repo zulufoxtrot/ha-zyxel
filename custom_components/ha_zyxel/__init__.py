@@ -23,21 +23,14 @@ _LOGGER = logging.getLogger(__name__)
 nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
-try:
-    from nr7101 import nr7101
-    NR7101_AVAILABLE = True
-except ImportError:
-    _LOGGER.error("Failed to import nr7101 library - check requirements in manifest.json")
-    NR7101_AVAILABLE = False
-    nr7101 = None
+from nr7101 import nr7101
 
 PLATFORMS = ["sensor", "button"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Zyxel integration from a config entry."""
-    if not NR7101_AVAILABLE or nr7101 is None:
-        raise ConfigEntryNotReady("Required nr7101 library is not available")
+
 
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
