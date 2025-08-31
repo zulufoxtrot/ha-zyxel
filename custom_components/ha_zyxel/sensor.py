@@ -257,7 +257,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 
 
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
-    """Optimized configured Zyxel sensor."""
+    """Representation of a configured Zyxel sensor."""
 
     def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
         """Initialize the sensor."""
@@ -294,3 +294,8 @@ class GenericZyxelSensor(AbstractZyxelSensor):
             return self._get_value_from_path()
         except (KeyError, AttributeError):
             return None
+
+    @property
+    def icon(self):
+        """Return the icon."""
+        return "mdi:router-wireless"

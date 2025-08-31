@@ -38,7 +38,9 @@ class ZyxelRebootButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Handle the button press."""
+        _LOGGER.info("Attempting to reboot Zyxel device")
         try:
             await self.hass.async_add_executor_job(self._router.reboot)
+            _LOGGER.info("Zyxel device reboot command sent successfully")
         except Exception as err:
             _LOGGER.error("Failed to send reboot command: %s", err)
