@@ -64,37 +64,41 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
+        success = False
 
         if user_input is not None:
             host = user_input[CONF_HOST]
 
-            # Sanitize entry
+            # sanitize entry
             if not host.startswith("http://") and not host.startswith("https://"):
                 host = f"https://{host}"
                 user_input[CONF_HOST] = host
 
             try:
                 info = await validate_input(self.hass, user_input)
-                return self.async_create_entry(title=info["title"], data=user_input)
-            except ConnectionError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                # Try HTTP if HTTPS failed
-                if "https" in user_input["host"]:
-                    user_input["host"] = user_input["host"].replace("https://", "http://")
-                    try:
-                        info = await validate_input(self.hass, user_input)
-                        return self.async_create_entry(title=info["title"], data=user_input)
-                    except ConnectionError:
-                        errors["base"] = "cannot_connect"
-                    except Exception:
-                        errors["base"] = "unknown"
-                else:
+                success = True
+            except Exception as e:  # pylint: disable=broad-except
+                _LOGGER.exception("First attempt failed", e)
+                errors["base"] = "unknown"
+
+            if not success and "https" not in user_input["host"]:
+                _LOGGER.info("User specified http but it failed, trying https...")
+                user_input["host"] = user_input["host"].replace("http://", "https://")
+                try:
+                    info = await validate_input(self.hass, user_input)
+                    success = True
+                except ConnectionError:
+                    errors["base"] = "cannot_connect"
+                except Exception as e:  # pylint: disable=broad-except
+                    _LOGGER.exception("Second attempt failed", e)
                     errors["base"] = "unknown"
 
-        return self.async_show_form(
-            step_id="user", data_schema=DATA_SCHEMA, errors=errors
-        )
+        if success:
+            return self.async_create_entry(title=info["title"], data=user_input)
+        else:
+            return self.async_show_form(
+                step_id="user", data_schema=DATA_SCHEMA, errors=errors
+            )
 
 
 class ConnectionError(exceptions.HomeAssistantError):

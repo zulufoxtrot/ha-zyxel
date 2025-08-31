@@ -272,21 +272,25 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self._get_value_from_path()
+        try:
+            return self._get_value_from_path()
+        except (KeyError, AttributeError):
+            return None
 
 
 class GenericZyxelSensor(AbstractZyxelSensor):
-    """Optimized generic Zyxel sensor."""
+    """Representation of a generic Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str):
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry, key)
-        # Simplified naming
-        name_parts = key.split(".")[-2:] if "." in key else [key]
-        self._attr_name = f"Zyxel {' '.join(name_parts)}"
-        self._attr_icon = "mdi:router-wireless"
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        name_parts = self._key.split(".")
+        return f"Zyxel {'.'.join(name_parts)}"
 
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self._get_value_from_path()
+        try:
+            return self._get_value_from_path()
+        except (KeyError, AttributeError):
+            return None
