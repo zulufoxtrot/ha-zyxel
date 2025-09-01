@@ -1,12 +1,14 @@
 {
-    "domain": "ha_zyxel",
-    "name": "Zyxel",
-    "codeowners": ["@zulufoxtrot","@HennieLP","@martijnmelchers"],
-    "config_flow": true,
-    "dependencies": [],
-    "documentation": "https://github.com/zulufoxtrot/ha-zyxel",
-    "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/zulufoxtrot/ha-zyxel/issues",
-    "requirements": ["nr7101@git+https://github.com/zulufoxtrot/nr7101.git@v1.5.0"],
-    "version": "0.2.2"
+  "domain": "ha_zyxel",
+  "name": "Zyxel",
+  "codeowners": ["@zulufoxtrot", "@HennieLP", "@martijnmelchers", "@Igglybuff"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/zulufoxtrot/ha-zyxel",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/zulufoxtrot/ha-zyxel/issues",
+  "requirements": [
+    "nr7101@git+https://github.com/zulufoxtrot/nr7101.git@49e0437ff8b9c56b90778cecb0520b8c9fc14ff6"
+  ],
+  "version": "0.2.4"
 }

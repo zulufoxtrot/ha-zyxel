@@ -14,6 +14,9 @@ __Home Assistant integration for Zyxel devices__
 
 Confirmed working on:
 
+- FWA505
+- FWA510
+- LTE3202-M437
 - LTE7490-M904
 - LTE5398-M904
 - NR5103v2
@@ -21,8 +24,6 @@ Confirmed working on:
 - NR7101
 - NR7102
 - NR7302
-- FWA505
-- FWA510
 
 Potentially compatible with a lot more devices.
 If you do test and find out your device is working, please submit an issue or a pull request and I'll add it to the list.
