@@ -172,27 +172,3 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-
-# IDE and editor files
-.ropeproject/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Home Assistant specific
-*.db
-*.log
-home-assistant.log
-home-assistant_v2.db
-known_devices.yaml
-secrets.yaml

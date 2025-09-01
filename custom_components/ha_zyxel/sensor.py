@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Dict
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,7 +13,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+)
 
 from custom_components.ha_zyxel.const import DOMAIN
 
@@ -157,30 +159,14 @@ KNOWN_SENSORS = {
 }
 
 
-def _flatten_dict(d: dict, parent_key: str = "") -> dict:
-    """Flatten a nested dictionary with dot notation for keys."""
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}.{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(_flatten_dict(v, new_key).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
-
-
-def _is_value_scalar(value: Any) -> bool:
-    """Check if a value is a scalar (string, number, bool)."""
-    return isinstance(value, (str, int, float, bool)) or value is None
-
-
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+        hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     if not coordinator.data:
+        _LOGGER.error("No data received from Zyxel device")
         return
 
     sensors = []
@@ -215,14 +201,30 @@ async def async_setup_entry(
                 )
             )
 
-    if sensors:
-        async_add_entities(sensors)
+    async_add_entities(sensors)
+
+
+def _flatten_dict(d: Dict[str, Any], parent_key: str = "") -> Dict[str, Any]:
+    """Flatten a nested dictionary with dot notation for keys."""
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}.{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def _is_value_scalar(value: Any) -> bool:
+    """Check if a value is a scalar (string, number, bool)."""
+    return isinstance(value, (str, int, float, bool)) or value is None
 
 
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+    def __init__(self, coordinator, entry, key):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
@@ -259,7 +261,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
+    def __init__(self, coordinator, entry, key, config):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
