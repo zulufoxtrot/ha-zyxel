@@ -6,11 +6,15 @@ import voluptuous as vol
 from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
-from nr7101 import nr7101
-
 from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# Block excessive nr7101 debug logging
+nr7101_logger = logging.getLogger("nr7101.nr7101")
+nr7101_logger.setLevel(logging.WARNING)
+
+from nr7101 import nr7101
 
 DATA_SCHEMA = vol.Schema(
     {
@@ -22,10 +26,8 @@ DATA_SCHEMA = vol.Schema(
 
 
 async def validate_input(hass: core.HomeAssistant, data):
-    """Validate that the user input allows us to connect.
+    """Validate that the user input allows us to connect."""
 
-    Data has the keys from DATA_SCHEMA with values provided by the user.
-    """
     try:
         # Create router instance and test connection
         router = await hass.async_add_executor_job(
@@ -35,16 +37,21 @@ async def validate_input(hass: core.HomeAssistant, data):
             data[CONF_PASSWORD]
         )
 
-        # Test that we can get data
+        # Test login
+        login_success = await hass.async_add_executor_job(router.login)
+        if not login_success:
+            raise Exception("Login failed - check credentials")
+
+        # Quick data test
         test_data = await hass.async_add_executor_job(router.get_status)
         if not test_data:
-            raise Exception("Connection/authentication failed.")
+            # Login worked but no data - still valid
+            test_data = {"connection": "success"}
 
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
         raise ConnectionError from ex
 
-    # Return info that you want to store in the config entry.
     return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
 
 
