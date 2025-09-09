@@ -1,11 +1,5 @@
 name: Release HA Component
 
-on:
-  workflow_run:
-    workflows: ["HACS Validation"]  # Must match the name of the first workflow
-    types:
-      - completed
-
 permissions:
   contents: write  # This is required for creating releases
 
