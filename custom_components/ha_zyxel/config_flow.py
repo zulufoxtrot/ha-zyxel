@@ -37,16 +37,11 @@ async def validate_input(hass: core.HomeAssistant, data):
             data[CONF_PASSWORD]
         )
 
-        # Test login
-        login_success = await hass.async_add_executor_job(router.login)
+        login_success = await hass.async_add_executor_job(router.get_status)
         if not login_success:
             raise Exception("Login failed - check credentials")
 
-        # Quick data test
-        test_data = await hass.async_add_executor_job(router.get_status)
-        if not test_data:
-            # Login worked but no data - still valid
-            test_data = {"connection": "success"}
+
 
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
@@ -79,7 +74,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 success = True
             except Exception as e:  # pylint: disable=broad-except
                 _LOGGER.exception("First attempt failed", e)
-                errors["base"] = "unknown"
+                errors["base"] = "cannot_connect"
 
             if not success and "https" not in user_input["host"]:
                 _LOGGER.info("User specified http but it failed, trying https...")

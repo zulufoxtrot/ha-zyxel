@@ -49,22 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(15):
                 def get_all_data():
-                    # Login only if we don't have a valid session
-                    if not hasattr(router, '_session_valid') or not router._session_valid:
-                        login_success = router.login()
-                        if not login_success:
-                            raise UpdateFailed("Login failed during data update")
-                        router._session_valid = True
-
                     data = router.get_status()
-                    if not data:
-                        # Session may have expired, try login once more
-                        router._session_valid = False
-                        login_success = router.login()
-                        if not login_success:
-                            raise UpdateFailed("Login failed after session timeout")
-                        router._session_valid = True
-                        data = router.get_status()
 
                     if not data:
                         raise UpdateFailed("No data received from router")
