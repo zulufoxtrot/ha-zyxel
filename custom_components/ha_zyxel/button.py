@@ -7,7 +7,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from .const import DOMAIN
+
+from .const import *
+from .coordinator import ZyxelDataUpdateCoordinator
+from .entity import ZyxelBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,31 +19,30 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the Zyxel buttons."""
-    router = hass.data[DOMAIN][entry.entry_id]["router"]
-    async_add_entities([ZyxelRebootButton(entry, router)])
+    coordinator: ZyxelDataUpdateCoordinator = entry.runtime_data
+    async_add_entities([ZyxelRebootButton(coordinator)])
 
 
-class ZyxelRebootButton(ButtonEntity):
+class ZyxelRebootButton(ZyxelBaseEntity, ButtonEntity):
     """Representation of a Zyxel reboot button."""
 
-    def __init__(self, entry: ConfigEntry, router) -> None:
+    def __init__(self, coordinator):
         """Initialize the button."""
-        self._router = router
-        self._attr_unique_id = f"{entry.entry_id}_reboot"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel ({entry.data['host']})",
-            manufacturer="Zyxel",
-            model="",
-        )
+        super().__init__(coordinator, "reboot", None)
         self._attr_icon = "mdi:restart"
-        self._attr_name = "Zyxel Reboot Device"
+        self._attr_name = "Reboot Device"
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.device_available
 
     async def async_press(self) -> None:
         """Handle the button press."""
         _LOGGER.info("Attempting to reboot Zyxel device")
         try:
-            await self.hass.async_add_executor_job(self._router.reboot)
+            await self.router.reboot()
             _LOGGER.info("Zyxel device reboot command sent successfully")
         except Exception as err:
             _LOGGER.error("Failed to send reboot command: %s", err)
+

@@ -11,10 +11,10 @@ from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 # Block excessive nr7101 debug logging
-nr7101_logger = logging.getLogger("nr7101.nr7101")
-nr7101_logger.setLevel(logging.WARNING)
+#nr7101_logger = logging.getLogger("nr7101.nr7101")
+#nr7101_logger.setLevel(logging.WARNING)
 
-from nr7101 import nr7101
+from .nr7101 import nr7101
 
 DATA_SCHEMA = vol.Schema(
     {
@@ -28,23 +28,22 @@ DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
 
+    # Create router instance and test connection
+    router = nr7101.NR7101(
+        data[CONF_HOST],
+        data[CONF_USERNAME],
+        data[CONF_PASSWORD]
+    )
+        
     try:
-        # Create router instance and test connection
-        router = await hass.async_add_executor_job(
-            nr7101.NR7101,
-            data[CONF_HOST],
-            data[CONF_USERNAME],
-            data[CONF_PASSWORD]
-        )
-
-        login_success = await hass.async_add_executor_job(router.get_status)
+        await router.login()
+        login_success = await router.get_status()
         if not login_success:
             raise Exception("Login failed - check credentials")
-
-
-
+        await router.close()
     except Exception as ex:
-        _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
+        await router.close()
+        _LOGGER.error("Unable to connect to Zyxel device: %s" % ex)
         raise ConnectionError from ex
 
     return {"title": f"Zyxel device: ({data[CONF_HOST]})"}

@@ -8,7 +8,9 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/zulufoxtrot/ha-zyxel/issues",
   "requirements": [
-    "nr7101@git+https://github.com/zulufoxtrot/nr7101.git@v2.0.2"
+    "pycryptodome>=3.15.0",
+    "requests>=2.25.0",
+    "urllib3>=1.26.0"
   ],
   "version": "0.2.7"
 }
