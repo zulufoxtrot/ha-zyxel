@@ -21,6 +21,7 @@ from custom_components.ha_zyxel.const import (
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    ERROR_BACKOFF_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -75,6 +76,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
     )
 
+    def set_update_interval(seconds: int) -> None:
+        coordinator.update_interval = timedelta(seconds=seconds)
+
     async def async_update_data():
         """Fetch data from the router."""
         try:
@@ -109,8 +113,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return data
 
             async with router_lock:
-                return await hass.async_add_executor_job(get_all_data)
+                data = await hass.async_add_executor_job(get_all_data)
+            set_update_interval(scan_interval)
+            return data
         except Exception as err:
+            set_update_interval(max(scan_interval, ERROR_BACKOFF_INTERVAL))
             raise UpdateFailed(
                 f"Error communicating with router: {err}"
             ) from err

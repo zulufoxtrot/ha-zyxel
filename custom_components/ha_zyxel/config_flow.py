@@ -8,17 +8,23 @@ from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
 from .const import (
+    CONF_ADVANCED_CELLULAR_DIAGNOSTICS,
     CONF_CLIENT_DIAGNOSTICS,
     CONF_CONSIDER_HOME,
     CONF_EXPOSE_ALL_ROUTER_SENSORS,
     CONF_SCAN_INTERVAL,
+    CONF_SENSITIVE_CELLULAR_IDENTIFIERS,
+    CONF_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
     CONF_TRACK_ALL,
+    DEFAULT_ADVANCED_CELLULAR_DIAGNOSTICS,
     DEFAULT_CLIENT_DIAGNOSTICS,
     DEFAULT_CONSIDER_HOME,
     DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
     DEFAULT_HOST,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SENSITIVE_CELLULAR_IDENTIFIERS,
+    DEFAULT_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
     DEFAULT_TRACK_ALL,
     DEFAULT_USERNAME,
     DOMAIN,
@@ -164,6 +170,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=options.get(
                         CONF_EXPOSE_ALL_ROUTER_SENSORS,
                         DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
+                    ),
+                ): bool,
+                vol.Optional(
+                    CONF_ADVANCED_CELLULAR_DIAGNOSTICS,
+                    default=options.get(
+                        CONF_ADVANCED_CELLULAR_DIAGNOSTICS,
+                        DEFAULT_ADVANCED_CELLULAR_DIAGNOSTICS,
+                    ),
+                ): bool,
+                vol.Optional(
+                    CONF_SENSITIVE_CELLULAR_IDENTIFIERS,
+                    default=options.get(
+                        CONF_SENSITIVE_CELLULAR_IDENTIFIERS,
+                        DEFAULT_SENSITIVE_CELLULAR_IDENTIFIERS,
+                    ),
+                ): bool,
+                vol.Optional(
+                    CONF_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
+                    default=options.get(
+                        CONF_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
+                        DEFAULT_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
                     ),
                 ): bool,
             }

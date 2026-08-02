@@ -93,10 +93,34 @@ The curated set includes:
 - Cellular connection, SIM-ready, and roaming states
 - Router traffic counters
 - A connected-device count sensor
+- Router model, firmware, hardware, and serial metadata when available
 
 Device trackers, client diagnostics, and uncurated raw router telemetry are
 opt-in. Enabling raw telemetry may create hundreds of disabled entities because
 the router returns duplicate and device-specific fields.
+
+Advanced cellular diagnostics are also opt-in. They use two aggregate entities:
+one for secondary component carriers and one for neighbor cells. Each entity
+stores at most eight filtered radio records as attributes, avoiding dynamic
+per-cell entity creation and excluding subscriber identifiers.
+
+IMEI, IMSI, and ICCID exposure is available through a separate sensitive-data
+option. It creates disabled diagnostic entities that must each be enabled
+explicitly. Enabled values may be retained in Home Assistant history and
+backups.
+
+Credential and session fields returned by the router have a separate opt-in.
+It creates disabled entities for scalar password, credential, cookie, token,
+secret, and session-key fields, plus one disabled aggregate entity containing
+the active client session key and cookies. The integration's configured login
+is never exposed. Sensitive scalar values longer than Home Assistant's
+255-character state limit use a short length state and retain the complete value
+in the entity's `value` attribute. Uncurated non-sensitive scalar router fields
+use the existing raw telemetry option; complete nested responses are not stored
+as entity attributes because they can exceed recorder limits.
+
+After a communication failure, polling temporarily backs off to 60 seconds. A
+successful update restores the configured scan interval.
 
 When upgrading from a version that exposed every field, stale generated entities
 are removed from the entity registry. Recorder history remains associated with
@@ -111,6 +135,9 @@ Select **Configure** on the integration to change:
 - Whether to create trackers for discovered clients
 - Whether to expose per-client connectivity and diagnostic entities
 - Whether to expose all uncurated router fields
+- Whether to expose aggregate secondary-carrier and neighbor-cell diagnostics
+- Whether to create disabled IMEI, IMSI, and ICCID diagnostic entities
+- Whether to create disabled credential and session diagnostic entities
 
 ## Support
 

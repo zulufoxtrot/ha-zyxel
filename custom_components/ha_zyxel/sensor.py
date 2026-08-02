@@ -20,16 +20,30 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.const import (
+    CONF_ADVANCED_CELLULAR_DIAGNOSTICS,
     CONF_CLIENT_DIAGNOSTICS,
     CONF_EXPOSE_ALL_ROUTER_SENSORS,
+    CONF_SENSITIVE_CELLULAR_IDENTIFIERS,
+    CONF_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
     DEFAULT_CLIENT_DIAGNOSTICS,
+    DEFAULT_ADVANCED_CELLULAR_DIAGNOSTICS,
     DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
+    DEFAULT_SENSITIVE_CELLULAR_IDENTIFIERS,
+    DEFAULT_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
     DOMAIN,
 )
 from custom_components.ha_zyxel.helpers import (
+    cellular_records,
+    device_metadata,
     flattened_scalars,
+    is_sensitive_field,
+    is_secret_field,
     lan_hosts,
+    router_session_data,
     select_unique_fields,
+    sensitive_state_attributes,
+    sensitive_state_value,
+    sensitive_identifiers,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -245,6 +259,9 @@ def _remove_unexposed_sensor_entities(
     intended_unique_ids: set[str],
     expose_all: bool,
     client_diagnostics: bool,
+    advanced_cellular_diagnostics: bool,
+    sensitive_cellular_identifiers: bool,
+    sensitive_credential_diagnostics: bool,
 ) -> None:
     """Remove registry entries no longer exposed by the entity modes."""
     registry = er.async_get(hass)
@@ -261,6 +278,20 @@ def _remove_unexposed_sensor_entities(
         ):
             continue
         suffix = unique_id.removeprefix(prefix)
+        if suffix in {"scc_info", "nbr_info"}:
+            if not advanced_cellular_diagnostics:
+                registry.async_remove(registry_entry.entity_id)
+            continue
+        if suffix in {"sensitive_imei", "sensitive_imsi", "sensitive_iccid"}:
+            if not sensitive_cellular_identifiers:
+                registry.async_remove(registry_entry.entity_id)
+            continue
+        if suffix == "sensitive_session_data" or suffix.startswith(
+            "sensitive_secret_"
+        ):
+            if not sensitive_credential_diagnostics:
+                registry.async_remove(registry_entry.entity_id)
+            continue
         is_client_sensor = _CLIENT_SENSOR_UNIQUE_ID.match(suffix) is not None
         if (is_client_sensor and client_diagnostics) or (
             not is_client_sensor and expose_all
@@ -275,13 +306,27 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Zyxel sensors."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry_data["coordinator"]
+    router_holder = entry_data["router_holder"]
     expose_all = entry.options.get(
         CONF_EXPOSE_ALL_ROUTER_SENSORS,
         DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
     )
     client_diagnostics = entry.options.get(
         CONF_CLIENT_DIAGNOSTICS, DEFAULT_CLIENT_DIAGNOSTICS
+    )
+    advanced_cellular_diagnostics = entry.options.get(
+        CONF_ADVANCED_CELLULAR_DIAGNOSTICS,
+        DEFAULT_ADVANCED_CELLULAR_DIAGNOSTICS,
+    )
+    sensitive_cellular_identifiers = entry.options.get(
+        CONF_SENSITIVE_CELLULAR_IDENTIFIERS,
+        DEFAULT_SENSITIVE_CELLULAR_IDENTIFIERS,
+    )
+    sensitive_credential_diagnostics = entry.options.get(
+        CONF_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
+        DEFAULT_SENSITIVE_CREDENTIAL_DIAGNOSTICS,
     )
     flattened = flattened_scalars(coordinator.data or {})
     selected = select_unique_fields(
@@ -303,9 +348,49 @@ async def async_setup_entry(
             GenericZyxelSensor(coordinator, entry, path)
             for path in flattened
             if path.rsplit(".", 1)[-1] not in KNOWN_SENSORS
+            and not is_sensitive_field(path)
         )
 
     sensors.append(ZyxelConnectedClients(coordinator, entry))
+    if advanced_cellular_diagnostics:
+        sensors.extend(
+            (
+                ZyxelCellularRecordsSensor(
+                    coordinator,
+                    entry,
+                    "SCC_Info",
+                    "Secondary carriers",
+                    "mdi:signal-variant",
+                ),
+                ZyxelCellularRecordsSensor(
+                    coordinator,
+                    entry,
+                    "NBR_Info",
+                    "Neighbor cells",
+                    "mdi:radio-tower",
+                ),
+            )
+        )
+    if sensitive_cellular_identifiers:
+        sensors.extend(
+            ZyxelSensitiveIdentifierSensor(
+                coordinator, entry, path, identifier
+            )
+            for identifier, (path, _value) in sensitive_identifiers(
+                coordinator.data or {}
+            ).items()
+        )
+    if sensitive_credential_diagnostics:
+        sensors.extend(
+            ZyxelSensitiveRawFieldSensor(coordinator, entry, path)
+            for path in flattened
+            if is_secret_field(path)
+        )
+        sensors.append(
+            ZyxelSensitiveSessionDataSensor(
+                coordinator, entry, router_holder
+            )
+        )
     intended_unique_ids = {
         sensor.unique_id for sensor in sensors if sensor.unique_id is not None
     }
@@ -315,6 +400,9 @@ async def async_setup_entry(
         intended_unique_ids,
         expose_all,
         client_diagnostics,
+        advanced_cellular_diagnostics,
+        sensitive_cellular_identifiers,
+        sensitive_credential_diagnostics,
     )
     async_add_entities(sensors)
 
@@ -365,7 +453,8 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="",
+            configuration_url=entry.data["host"],
+            **device_metadata(coordinator.data or {}),
         )
 
     @property
@@ -445,6 +534,98 @@ class GenericZyxelSensor(AbstractZyxelSensor):
         return "mdi:router-wireless"
 
 
+class ZyxelSensitiveIdentifierSensor(AbstractZyxelSensor):
+    """Represent an explicitly requested sensitive cellular identifier."""
+
+    def __init__(
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        key: str,
+        identifier: str,
+    ) -> None:
+        """Initialize a sensitive cellular identifier sensor."""
+        super().__init__(coordinator, entry, key)
+        self._attr_unique_id = f"{entry.entry_id}_sensitive_{identifier}"
+        self._attr_name = f"Zyxel {identifier.upper()}"
+        self._attr_icon = "mdi:identifier"
+
+    @property
+    def state(self):
+        """Return the cellular identifier."""
+        try:
+            return self._get_value_from_path()
+        except (KeyError, AttributeError):
+            return None
+
+
+class ZyxelSensitiveRawFieldSensor(AbstractZyxelSensor):
+    """Represent an explicitly requested credential or session field."""
+
+    def __init__(self, coordinator, entry: ConfigEntry, key: str) -> None:
+        """Initialize a sensitive raw field sensor."""
+        super().__init__(coordinator, entry, key)
+        self._attr_unique_id = f"{entry.entry_id}_sensitive_secret_{key}"
+        self._attr_name = f"Zyxel sensitive {key}"
+        self._attr_icon = "mdi:key-alert"
+
+    @property
+    def state(self):
+        """Return the sensitive router field value."""
+        try:
+            return sensitive_state_value(self._get_value_from_path())
+        except (KeyError, AttributeError):
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Return a full value when it is too long for Home Assistant state."""
+        try:
+            return sensitive_state_attributes(self._get_value_from_path())
+        except (KeyError, AttributeError):
+            return {}
+
+
+class ZyxelSensitiveSessionDataSensor(CoordinatorEntity, SensorEntity):
+    """Represent active session data held by the router client."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_icon = "mdi:cookie-lock"
+    _attr_name = "Zyxel sensitive session data"
+
+    def __init__(self, coordinator, entry: ConfigEntry, router_holder) -> None:
+        """Initialize the sensitive session data sensor."""
+        super().__init__(coordinator)
+        self._router_holder = router_holder
+        self._attr_unique_id = f"{entry.entry_id}_sensitive_session_data"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=f"Zyxel ({entry.data['host']})",
+            manufacturer="Zyxel",
+            configuration_url=entry.data["host"],
+            **device_metadata(coordinator.data or {}),
+        )
+
+    def _session_data(self) -> dict[str, object]:
+        """Return current data from the replaceable router client."""
+        return router_session_data(self._router_holder["router"])
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of active session values."""
+        data = self._session_data()
+        cookies = data.get("cookies", {})
+        return int("session_key" in data) + (
+            len(cookies) if isinstance(cookies, dict) else 0
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Return active session data as explicitly enabled attributes."""
+        return self._session_data()
+
+
 class ZyxelConnectedClients(CoordinatorEntity, SensorEntity):
     """Represent the number of clients currently connected."""
 
@@ -460,6 +641,8 @@ class ZyxelConnectedClients(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
+            configuration_url=entry.data["host"],
+            **device_metadata(coordinator.data or {}),
         )
 
     @property
@@ -470,6 +653,52 @@ class ZyxelConnectedClients(CoordinatorEntity, SensorEntity):
             for host in lan_hosts(self.coordinator).values()
             if host.get("Active")
         )
+
+
+class ZyxelCellularRecordsSensor(CoordinatorEntity, SensorEntity):
+    """Represent a bounded collection of advanced cellular records."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        data_key: str,
+        name: str,
+        icon: str,
+    ) -> None:
+        """Initialize an aggregate cellular diagnostic sensor."""
+        super().__init__(coordinator)
+        self._data_key = data_key
+        self._attr_unique_id = f"{entry.entry_id}_{data_key.lower()}"
+        self._attr_name = name
+        self._attr_icon = icon
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=f"Zyxel ({entry.data['host']})",
+            manufacturer="Zyxel",
+            configuration_url=entry.data["host"],
+            **device_metadata(coordinator.data or {}),
+        )
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of reported cellular records."""
+        return len(
+            cellular_records(self.coordinator.data or {}, self._data_key)
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, list[dict[str, object]]]:
+        """Return bounded, filtered cellular record details."""
+        return {
+            "records": cellular_records(
+                self.coordinator.data or {}, self._data_key
+            )
+        }
 
 
 def _is_wifi(host: dict) -> bool:

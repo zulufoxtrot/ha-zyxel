@@ -27,14 +27,20 @@
           "consider_home": "Durée de présence (secondes)",
           "track_all": "Suivre tous les appareils détectés",
           "client_diagnostics": "Afficher les diagnostics des clients",
-          "expose_all_router_sensors": "Afficher tous les capteurs du routeur"
+          "expose_all_router_sensors": "Afficher tous les capteurs du routeur",
+          "advanced_cellular_diagnostics": "Diagnostics cellulaires avancés",
+          "sensitive_cellular_identifiers": "Identifiants cellulaires sensibles",
+          "sensitive_credential_diagnostics": "Diagnostics sensibles d'identification et de session"
         },
         "data_description": {
           "scan_interval": "Fréquence d'interrogation du routeur (10 à 3600 secondes).",
           "consider_home": "Durée pendant laquelle un appareil absent reste présent.",
           "track_all": "Crée un suivi pour chaque appareil détecté.",
           "client_diagnostics": "Crée des entités désactivées de connectivité et de diagnostic pour les clients.",
-          "expose_all_router_sensors": "Crée des entités désactivées pour les données brutes non sélectionnées."
+          "expose_all_router_sensors": "Crée des entités désactivées pour les données brutes non sélectionnées.",
+          "advanced_cellular_diagnostics": "Crée deux capteurs pour les porteuses secondaires et les cellules voisines.",
+          "sensitive_cellular_identifiers": "Crée des entités de diagnostic désactivées pour IMEI, IMSI et ICCID. L'activation d'une entité stocke sa valeur dans l'historique et les sauvegardes de Home Assistant.",
+          "sensitive_credential_diagnostics": "Crée des entités désactivées pour les champs sensibles renvoyés par le routeur, ainsi que les clés et cookies de la session active. Les valeurs activées sont stockées dans l'historique et les sauvegardes de Home Assistant. Les identifiants de connexion configurés ne sont jamais exposés."
         }
       }
     }
