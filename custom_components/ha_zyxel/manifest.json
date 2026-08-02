@@ -10,5 +10,5 @@
   "requirements": [
     "nr7101@git+https://github.com/zulufoxtrot/nr7101.git@v2.0.2"
   ],
-  "version": "0.2.7"
+  "version": "0.3.0"
 }
