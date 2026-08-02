@@ -46,6 +46,28 @@ SECRET_FIELD_MARKERS = (
 MAX_STATE_LENGTH = 255
 
 
+class PollingBackoffTracker:
+    """Track entry into and recovery from polling backoff."""
+
+    def __init__(self) -> None:
+        """Initialize with normal polling active."""
+        self.active = False
+
+    def enter(self) -> bool:
+        """Return whether polling has newly entered backoff."""
+        if self.active:
+            return False
+        self.active = True
+        return True
+
+    def recover(self) -> bool:
+        """Return whether polling has newly recovered from backoff."""
+        if not self.active:
+            return False
+        self.active = False
+        return True
+
+
 def flattened_scalars(data: dict, parent_key: str = "") -> dict[str, object]:
     """Flatten scalar values from nested router data."""
     result: dict[str, object] = {}

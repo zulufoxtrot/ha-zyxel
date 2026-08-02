@@ -23,6 +23,7 @@ from custom_components.ha_zyxel.const import (
     DOMAIN,
     ERROR_BACKOFF_INTERVAL,
 )
+from custom_components.ha_zyxel.helpers import PollingBackoffTracker
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     scan_interval = entry.options.get(
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
     )
+    backoff_tracker = PollingBackoffTracker()
 
     def set_update_interval(seconds: int) -> None:
         coordinator.update_interval = timedelta(seconds=seconds)
@@ -115,9 +117,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with router_lock:
                 data = await hass.async_add_executor_job(get_all_data)
             set_update_interval(scan_interval)
+            if backoff_tracker.recover():
+                _LOGGER.info(
+                    "Zyxel communication recovered; restored %s-second polling interval",
+                    scan_interval,
+                )
             return data
         except Exception as err:
-            set_update_interval(max(scan_interval, ERROR_BACKOFF_INTERVAL))
+            backoff_interval = max(
+                scan_interval, ERROR_BACKOFF_INTERVAL
+            )
+            set_update_interval(backoff_interval)
+            if backoff_tracker.enter():
+                _LOGGER.warning(
+                    "Zyxel polling failed; using %s-second backoff interval",
+                    backoff_interval,
+                )
             raise UpdateFailed(
                 f"Error communicating with router: {err}"
             ) from err

@@ -85,6 +85,19 @@ class LanHostsTest(unittest.TestCase):
         self.assertEqual(module.lan_hosts(coordinator), {})
 
 
+class PollingBackoffTrackerTest(unittest.TestCase):
+    """Verify polling transition notifications are emitted once."""
+
+    def test_reports_only_backoff_and_recovery_transitions(self):
+        module = _load_helpers()
+        tracker = module.PollingBackoffTracker()
+
+        self.assertTrue(tracker.enter())
+        self.assertFalse(tracker.enter())
+        self.assertTrue(tracker.recover())
+        self.assertFalse(tracker.recover())
+
+
 class SelectUniqueFieldsTest(unittest.TestCase):
     """Verify canonical router field selection."""
 
