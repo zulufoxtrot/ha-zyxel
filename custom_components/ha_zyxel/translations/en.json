@@ -27,14 +27,20 @@
           "consider_home": "Consider home (seconds)",
           "track_all": "Track all discovered devices",
           "client_diagnostics": "Expose client diagnostics",
-          "expose_all_router_sensors": "Expose all router sensors"
+          "expose_all_router_sensors": "Expose all router sensors",
+          "advanced_cellular_diagnostics": "Advanced cellular diagnostics",
+          "sensitive_cellular_identifiers": "Sensitive cellular identifiers",
+          "sensitive_credential_diagnostics": "Sensitive credential and session diagnostics"
         },
         "data_description": {
           "scan_interval": "How often to poll the router (10-3600 seconds).",
           "consider_home": "How long an unseen device remains home.",
           "track_all": "Create trackers for every discovered device.",
           "client_diagnostics": "Create disabled connectivity and diagnostic entities for detected clients.",
-          "expose_all_router_sensors": "Create disabled entities for uncurated raw router fields."
+          "expose_all_router_sensors": "Create disabled entities for uncurated raw router fields.",
+          "advanced_cellular_diagnostics": "Create two aggregate sensors for secondary carriers and neighbor cells.",
+          "sensitive_cellular_identifiers": "Create disabled diagnostic entities for IMEI, IMSI, and ICCID. Enabling an entity stores its value in Home Assistant history and backups.",
+          "sensitive_credential_diagnostics": "Create disabled entities for sensitive fields returned by the router and active session keys and cookies. Enabled values are stored in Home Assistant history and backups. The configured integration login is never exposed."
         }
       }
     }

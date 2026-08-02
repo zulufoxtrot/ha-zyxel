@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
+from .helpers import device_metadata
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ async def async_setup_entry(
         [
             ZyxelRebootButton(
                 entry,
+                entry_data["coordinator"],
                 entry_data["router_holder"],
                 entry_data["router_lock"],
             )
@@ -33,7 +35,9 @@ async def async_setup_entry(
 class ZyxelRebootButton(ButtonEntity):
     """Representation of a Zyxel reboot button."""
 
-    def __init__(self, entry: ConfigEntry, router_holder, router_lock) -> None:
+    def __init__(
+        self, entry: ConfigEntry, coordinator, router_holder, router_lock
+    ) -> None:
         """Initialize the button."""
         self._router_holder = router_holder
         self._router_lock = router_lock
@@ -42,7 +46,8 @@ class ZyxelRebootButton(ButtonEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="",
+            configuration_url=entry.data["host"],
+            **device_metadata(coordinator.data or {}),
         )
         self._attr_icon = "mdi:restart"
         self._attr_name = "Zyxel Reboot Device"

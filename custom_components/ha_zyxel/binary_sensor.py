@@ -19,7 +19,11 @@ from custom_components.ha_zyxel.const import (
     DEFAULT_CLIENT_DIAGNOSTICS,
     DOMAIN,
 )
-from custom_components.ha_zyxel.helpers import lan_hosts, select_unique_fields
+from custom_components.ha_zyxel.helpers import (
+    device_metadata,
+    lan_hosts,
+    select_unique_fields,
+)
 
 ROUTER_BINARY_SENSORS = (
     ("INTF_Status", "Cellular connection", lambda value: value == "Up"),
@@ -118,6 +122,8 @@ class ZyxelRouterBinarySensor(CoordinatorEntity, BinarySensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
+            configuration_url=entry.data["host"],
+            **device_metadata(coordinator.data or {}),
         )
 
     def _value(self):
