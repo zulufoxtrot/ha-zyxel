@@ -10,12 +10,15 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.const import DOMAIN
+from custom_components.ha_zyxel.helpers import lan_hosts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -175,19 +178,18 @@ def _is_value_scalar(value: Any) -> bool:
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-
-    if not coordinator.data:
-        return
 
     sensors = []
 
     # Process all keys in the JSON and create sensors for them
     # We'll use a flat structure for simplicity
-    for key, value in _flatten_dict(coordinator.data).items():
+    for key, value in _flatten_dict(coordinator.data or {}).items():
         # Skip non-scalar values
         if not _is_value_scalar(value):
             continue
@@ -215,12 +217,34 @@ async def async_setup_entry(
                 )
             )
 
-    if sensors:
-        async_add_entities(sensors)
+    sensors.append(ZyxelConnectedClients(coordinator, entry))
+    async_add_entities(sensors)
+
+    tracked: set[str] = set()
+
+    @callback
+    def discover_clients() -> None:
+        new_entities = []
+        for mac in lan_hosts(coordinator):
+            if mac in tracked:
+                continue
+            tracked.add(mac)
+            new_entities.extend(
+                ZyxelClientSensor(coordinator, entry.entry_id, mac, spec)
+                for spec in CLIENT_SENSOR_SPECS
+            )
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(discover_clients))
+    discover_clients()
 
 
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator, entry: ConfigEntry, key: str):
         """Initialize the sensor."""
@@ -259,7 +283,11 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(
+        self, coordinator, entry: ConfigEntry, key: str, config: dict
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
@@ -299,3 +327,234 @@ class GenericZyxelSensor(AbstractZyxelSensor):
     def icon(self):
         """Return the icon."""
         return "mdi:router-wireless"
+
+
+class ZyxelConnectedClients(CoordinatorEntity, SensorEntity):
+    """Represent the number of clients currently connected."""
+
+    _attr_icon = "mdi:lan-connect"
+    _attr_name = "Connected devices"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the connected-client sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_connected_clients"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=f"Zyxel ({entry.data['host']})",
+            manufacturer="Zyxel",
+        )
+
+    @property
+    def native_value(self) -> int:
+        """Return the active LAN client count."""
+        return sum(
+            1
+            for host in lan_hosts(self.coordinator).values()
+            if host.get("Active")
+        )
+
+
+def _is_wifi(host: dict) -> bool:
+    return "WiFi" in (host.get("Layer1Interface") or "")
+
+
+def _nonzero(value):
+    return value if value not in (None, 0, "") else None
+
+
+def _wifi_only(value_fn):
+    return lambda host: value_fn(host) if _is_wifi(host) else None
+
+
+def _kbps_to_mbps(value):
+    if not isinstance(value, (int, float)) or not value:
+        return None
+    return round(value / 1000, 1)
+
+
+CLIENT_SENSOR_SPECS = (
+    {
+        "id": "rssi",
+        "name": "Signal strength",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "unit": "dBm",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": _wifi_only(lambda host: _nonzero(host.get("X_ZYXEL_RSSI"))),
+    },
+    {
+        "id": "snr",
+        "name": "Signal-to-noise ratio",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": _wifi_only(lambda host: _nonzero(host.get("X_ZYXEL_SNR"))),
+    },
+    {
+        "id": "signal_quality",
+        "name": "Signal quality",
+        "unit": "%",
+        "icon": "mdi:signal",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": _wifi_only(
+            lambda host: _nonzero(host.get("X_ZYXEL_SignalStrength"))
+        ),
+    },
+    {
+        "id": "link_rate",
+        "name": "Link rate",
+        "device_class": SensorDeviceClass.DATA_RATE,
+        "unit": "Mbit/s",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": lambda host: host.get("X_ZYXEL_PhyRate"),
+    },
+    {
+        "id": "downlink_rate",
+        "name": "Downlink rate",
+        "device_class": SensorDeviceClass.DATA_RATE,
+        "unit": "Mbit/s",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": lambda host: _kbps_to_mbps(
+            host.get("X_ZYXEL_LastDataDownlinkRate")
+        ),
+    },
+    {
+        "id": "uplink_rate",
+        "name": "Uplink rate",
+        "device_class": SensorDeviceClass.DATA_RATE,
+        "unit": "Mbit/s",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": lambda host: _kbps_to_mbps(
+            host.get("X_ZYXEL_LastDataUplinkRate")
+        ),
+    },
+    {
+        "id": "bytes_received",
+        "name": "Bytes received",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "unit": "B",
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "value": lambda host: host.get("X_ZYXEL_BytesReceived"),
+    },
+    {
+        "id": "bytes_sent",
+        "name": "Bytes sent",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "unit": "B",
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "value": lambda host: host.get("X_ZYXEL_BytesSent"),
+    },
+    {
+        "id": "connected_duration",
+        "name": "Connected duration",
+        "device_class": SensorDeviceClass.DURATION,
+        "unit": "s",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "value": lambda host: host.get("X_ZYXEL_Duration"),
+    },
+    {
+        "id": "ip_address",
+        "name": "IP address",
+        "icon": "mdi:ip-network",
+        "value": lambda host: host.get("IPAddress") or None,
+    },
+    {
+        "id": "ssid",
+        "name": "SSID",
+        "icon": "mdi:wifi",
+        "value": _wifi_only(lambda host: host.get("WiFiname") or None),
+    },
+    {
+        "id": "band",
+        "name": "Band",
+        "icon": "mdi:wifi",
+        "value": _wifi_only(
+            lambda host: host.get("SupportedFrequencyBands") or None
+        ),
+    },
+    {
+        "id": "network",
+        "name": "Network",
+        "icon": "mdi:wifi-cog",
+        "value": _wifi_only(
+            lambda host: (
+                "main" if host.get("X_ZYXEL_MainSSID") else "guest"
+            )
+            if "X_ZYXEL_MainSSID" in host
+            else None
+        ),
+    },
+    {
+        "id": "wifi_standard",
+        "name": "Wi-Fi standard",
+        "icon": "mdi:wifi",
+        "value": _wifi_only(
+            lambda host: host.get("X_ZYXEL_OperatingStandard") or None
+        ),
+    },
+    {
+        "id": "connection_type",
+        "name": "Connection type",
+        "icon": "mdi:lan",
+        "value": lambda host: (
+            "wifi"
+            if _is_wifi(host)
+            else ("ethernet" if host.get("Layer1Interface") else None)
+        ),
+    },
+    {
+        "id": "device_type",
+        "name": "Device type",
+        "icon": "mdi:devices",
+        "value": lambda host: host.get("X_ZYXEL_HostType") or None,
+    },
+    {
+        "id": "address_source",
+        "name": "Address source",
+        "icon": "mdi:ip",
+        "value": lambda host: host.get("AddressSource") or None,
+    },
+)
+
+
+class ZyxelClientSensor(CoordinatorEntity, SensorEntity):
+    """Represent one diagnostic value for a LAN client."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator,
+        entry_id: str,
+        mac: str,
+        spec: dict,
+    ) -> None:
+        """Initialize a client diagnostic sensor."""
+        super().__init__(coordinator)
+        self._mac = mac
+        self._value_fn = spec["value"]
+        self._attr_unique_id = f"{entry_id}_{mac}_{spec['id']}"
+        self._attr_name = spec["name"]
+        self._attr_device_class = spec.get("device_class")
+        self._attr_native_unit_of_measurement = spec.get("unit")
+        self._attr_state_class = spec.get("state_class")
+        self._attr_icon = spec.get("icon")
+
+        host = lan_hosts(coordinator).get(mac, {})
+        friendly_name = host.get("curHostName") or host.get("HostName") or mac
+        self._attr_device_info = DeviceInfo(
+            connections={(CONNECTION_NETWORK_MAC, mac)},
+            default_name=friendly_name,
+        )
+
+    @property
+    def native_value(self):
+        """Return the current client diagnostic value."""
+        host = lan_hosts(self.coordinator).get(self._mac, {})
+        try:
+            return self._value_fn(host)
+        except (TypeError, ValueError):
+            return None

@@ -82,6 +82,23 @@ Note: the Mushroom card extension is required for the above code to work.
 
 In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.
 
+The integration also creates:
+
+- A connected-device count sensor
+- Device trackers for discovered LAN clients
+- Optional connectivity and diagnostic sensors for each client
+
+Generic router telemetry and per-client diagnostic entities are disabled by
+default to avoid creating an excessive number of active entities.
+
+## Options
+
+Select **Configure** on the integration to change:
+
+- The router scan interval
+- How long an unseen client is considered home
+- Whether trackers for all discovered clients are enabled by default
+
 ## Support
 
 Please submit an [issue](https://github.com/zulufoxtrot/ha-zyxel/issues).

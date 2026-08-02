@@ -17,5 +17,22 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Zyxel options",
+        "data": {
+          "scan_interval": "Scan interval (seconds)",
+          "consider_home": "Consider home (seconds)",
+          "track_all": "Track all discovered devices"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll the router (10-3600 seconds).",
+          "consider_home": "How long an unseen device remains home.",
+          "track_all": "Enable trackers for every discovered device."
+        }
+      }
+    }
   }
 }

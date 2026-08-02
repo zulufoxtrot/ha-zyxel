@@ -17,5 +17,22 @@
     "abort": {
       "already_configured": "L'appareil est déjà configuré"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Zyxel",
+        "data": {
+          "scan_interval": "Intervalle d'analyse (secondes)",
+          "consider_home": "Durée de présence (secondes)",
+          "track_all": "Suivre tous les appareils détectés"
+        },
+        "data_description": {
+          "scan_interval": "Fréquence d'interrogation du routeur (10 à 3600 secondes).",
+          "consider_home": "Durée pendant laquelle un appareil absent reste présent.",
+          "track_all": "Active le suivi de chaque appareil détecté."
+        }
+      }
+    }
   }
 }
