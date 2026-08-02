@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.const import (
@@ -32,6 +33,15 @@ async def async_setup_entry(
         CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME
     )
     track_all = entry.options.get(CONF_TRACK_ALL, DEFAULT_TRACK_ALL)
+    if not track_all:
+        registry = er.async_get(hass)
+        for registry_entry in er.async_entries_for_config_entry(
+            registry, entry.entry_id
+        ):
+            if registry_entry.entity_id.startswith("device_tracker."):
+                registry.async_remove(registry_entry.entity_id)
+        return
+
     tracked: set[str] = set()
 
     @callback
@@ -42,7 +52,6 @@ async def async_setup_entry(
                 entry.entry_id,
                 mac,
                 consider_home,
-                track_all,
             )
             for mac in lan_hosts(coordinator)
             if mac not in tracked
@@ -67,7 +76,6 @@ class ZyxelDeviceTracker(CoordinatorEntity, ScannerEntity):
         entry_id: str,
         mac: str,
         consider_home: int,
-        track_all: bool,
     ) -> None:
         """Initialize a LAN client tracker."""
         super().__init__(coordinator)
@@ -75,7 +83,6 @@ class ZyxelDeviceTracker(CoordinatorEntity, ScannerEntity):
         self._consider_home = timedelta(seconds=consider_home)
         self._last_seen: datetime | None = None
         self._attr_unique_id = f"{entry_id}_{mac}"
-        self._attr_entity_registry_enabled_default = track_all
         self._update_last_seen()
 
         friendly_name = self._friendly_name()

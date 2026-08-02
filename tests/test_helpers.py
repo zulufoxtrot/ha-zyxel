@@ -85,5 +85,50 @@ class LanHostsTest(unittest.TestCase):
         self.assertEqual(module.lan_hosts(coordinator), {})
 
 
+class SelectUniqueFieldsTest(unittest.TestCase):
+    """Verify canonical router field selection."""
+
+    def test_prefers_cellular_and_collapses_duplicates(self):
+        module = _load_helpers()
+        data = {
+            "device_info": {"Cell": {"Status": "stale"}},
+            "device": {"Cell": {"Status": "duplicate"}},
+            "cardpage": {"Cell": {"Status": "Up"}},
+            "cellular": {"Status": "Connected"},
+        }
+
+        self.assertEqual(
+            module.select_unique_fields(data, {"Status"}),
+            {"Status": ("cellular.Status", "Connected")},
+        )
+
+    def test_skips_unrequested_and_non_scalar_values(self):
+        module = _load_helpers()
+        data = {
+            "cellular": {
+                "Band": "LTE_BC20",
+                "Networks": ["LTE", "NR"],
+                "Details": {"CellId": 1234},
+            }
+        }
+
+        self.assertEqual(
+            module.select_unique_fields(data, {"Band", "Networks"}),
+            {"Band": ("cellular.Band", "LTE_BC20")},
+        )
+
+    def test_falls_back_when_preferred_source_is_empty(self):
+        module = _load_helpers()
+        data = {
+            "cellular": {"UpTime": None},
+            "cardpage": {"DeviceInfo": {"UpTime": 3600}},
+        }
+
+        self.assertEqual(
+            module.select_unique_fields(data, {"UpTime"}),
+            {"UpTime": ("cardpage.DeviceInfo.UpTime", 3600)},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

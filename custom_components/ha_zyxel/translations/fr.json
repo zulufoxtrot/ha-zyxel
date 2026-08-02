@@ -25,12 +25,16 @@
         "data": {
           "scan_interval": "Intervalle d'analyse (secondes)",
           "consider_home": "Durée de présence (secondes)",
-          "track_all": "Suivre tous les appareils détectés"
+          "track_all": "Suivre tous les appareils détectés",
+          "client_diagnostics": "Afficher les diagnostics des clients",
+          "expose_all_router_sensors": "Afficher tous les capteurs du routeur"
         },
         "data_description": {
           "scan_interval": "Fréquence d'interrogation du routeur (10 à 3600 secondes).",
           "consider_home": "Durée pendant laquelle un appareil absent reste présent.",
-          "track_all": "Active le suivi de chaque appareil détecté."
+          "track_all": "Crée un suivi pour chaque appareil détecté.",
+          "client_diagnostics": "Crée des entités désactivées de connectivité et de diagnostic pour les clients.",
+          "expose_all_router_sensors": "Crée des entités désactivées pour les données brutes non sélectionnées."
         }
       }
     }

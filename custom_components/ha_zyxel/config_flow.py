@@ -8,10 +8,14 @@ from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
 from .const import (
+    CONF_CLIENT_DIAGNOSTICS,
     CONF_CONSIDER_HOME,
+    CONF_EXPOSE_ALL_ROUTER_SENSORS,
     CONF_SCAN_INTERVAL,
     CONF_TRACK_ALL,
+    DEFAULT_CLIENT_DIAGNOSTICS,
     DEFAULT_CONSIDER_HOME,
+    DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
     DEFAULT_HOST,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_SCAN_INTERVAL,
@@ -148,6 +152,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_TRACK_ALL,
                     default=options.get(CONF_TRACK_ALL, DEFAULT_TRACK_ALL),
+                ): bool,
+                vol.Optional(
+                    CONF_CLIENT_DIAGNOSTICS,
+                    default=options.get(
+                        CONF_CLIENT_DIAGNOSTICS, DEFAULT_CLIENT_DIAGNOSTICS
+                    ),
+                ): bool,
+                vol.Optional(
+                    CONF_EXPOSE_ALL_ROUTER_SENSORS,
+                    default=options.get(
+                        CONF_EXPOSE_ALL_ROUTER_SENSORS,
+                        DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
+                    ),
                 ): bool,
             }
         )

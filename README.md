@@ -80,16 +80,27 @@ Note: the Mushroom card extension is required for the above code to work.
 
 ## Available entities
 
-In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.
+By default, the integration exposes one canonical entity for each useful router
+value instead of registering every raw field returned by the device. This avoids
+hundreds of duplicate entities from repeated payload sections.
 
-The integration also creates:
+The curated set includes:
 
+- Cellular signal and quality measurements
+- LTE and 5G access technology, bands, and carrier aggregation
+- Mobile network, cell, site, and tracking-area information
+- Router uptime and temperature measurements
+- Cellular connection, SIM-ready, and roaming states
+- Router traffic counters
 - A connected-device count sensor
-- Device trackers for discovered LAN clients
-- Optional connectivity and diagnostic sensors for each client
 
-Generic router telemetry and per-client diagnostic entities are disabled by
-default to avoid creating an excessive number of active entities.
+Device trackers, client diagnostics, and uncurated raw router telemetry are
+opt-in. Enabling raw telemetry may create hundreds of disabled entities because
+the router returns duplicate and device-specific fields.
+
+When upgrading from a version that exposed every field, stale generated entities
+are removed from the entity registry. Recorder history remains associated with
+the old entity IDs until Home Assistant purges it normally.
 
 ## Options
 
@@ -97,7 +108,9 @@ Select **Configure** on the integration to change:
 
 - The router scan interval
 - How long an unseen client is considered home
-- Whether trackers for all discovered clients are enabled by default
+- Whether to create trackers for discovered clients
+- Whether to expose per-client connectivity and diagnostic entities
+- Whether to expose all uncurated router fields
 
 ## Support
 

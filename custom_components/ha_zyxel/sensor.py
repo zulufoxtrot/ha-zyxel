@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -15,10 +16,21 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from custom_components.ha_zyxel.const import DOMAIN
-from custom_components.ha_zyxel.helpers import lan_hosts
+from custom_components.ha_zyxel.const import (
+    CONF_CLIENT_DIAGNOSTICS,
+    CONF_EXPOSE_ALL_ROUTER_SENSORS,
+    DEFAULT_CLIENT_DIAGNOSTICS,
+    DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
+    DOMAIN,
+)
+from custom_components.ha_zyxel.helpers import (
+    flattened_scalars,
+    lan_hosts,
+    select_unique_fields,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,24 +169,104 @@ KNOWN_SENSORS = {
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
     },
+    "UpTime": {
+        "name": "Router uptime",
+        "unit": "s",
+        "icon": "mdi:timer-outline",
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_Current_Access_Technology": {
+        "name": "Access technology",
+        "unit": None,
+        "icon": "mdi:access-point-network",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_Network_In_Use": {
+        "name": "Mobile network",
+        "unit": None,
+        "icon": "mdi:radio-tower",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_Current_Band": {
+        "name": "LTE band",
+        "unit": None,
+        "icon": "mdi:signal-4g",
+        "device_class": None,
+        "state_class": None,
+    },
+    "NSA_Band": {
+        "name": "5G NSA band",
+        "unit": None,
+        "icon": "mdi:signal-5g",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_CA_COMBINATION": {
+        "name": "Carrier aggregation",
+        "unit": None,
+        "icon": "mdi:signal-variant",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_Cell_ID": {
+        "name": "Cell ID",
+        "unit": None,
+        "icon": "mdi:radio-tower",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_SiteID": {
+        "name": "Site ID",
+        "unit": None,
+        "icon": "mdi:radio-tower",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_TAC": {
+        "name": "Tracking area code",
+        "unit": None,
+        "icon": "mdi:map-marker-radius",
+        "device_class": None,
+        "state_class": None,
+    },
 }
 
-
-def _flatten_dict(d: dict, parent_key: str = "") -> dict:
-    """Flatten a nested dictionary with dot notation for keys."""
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}.{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(_flatten_dict(v, new_key).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
+_CLIENT_SENSOR_UNIQUE_ID = re.compile(
+    r"^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}_"
+)
 
 
-def _is_value_scalar(value: Any) -> bool:
-    """Check if a value is a scalar (string, number, bool)."""
-    return isinstance(value, (str, int, float, bool)) or value is None
+def _remove_unexposed_sensor_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    intended_unique_ids: set[str],
+    expose_all: bool,
+    client_diagnostics: bool,
+) -> None:
+    """Remove registry entries no longer exposed by the entity modes."""
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+    for registry_entry in er.async_entries_for_config_entry(
+        registry, entry.entry_id
+    ):
+        if not registry_entry.entity_id.startswith("sensor."):
+            continue
+        unique_id = registry_entry.unique_id
+        if (
+            not unique_id.startswith(prefix)
+            or unique_id in intended_unique_ids
+        ):
+            continue
+        suffix = unique_id.removeprefix(prefix)
+        is_client_sensor = _CLIENT_SENSOR_UNIQUE_ID.match(suffix) is not None
+        if (is_client_sensor and client_diagnostics) or (
+            not is_client_sensor and expose_all
+        ):
+            continue
+        registry.async_remove(registry_entry.entity_id)
 
 
 async def async_setup_entry(
@@ -184,55 +276,73 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    expose_all = entry.options.get(
+        CONF_EXPOSE_ALL_ROUTER_SENSORS,
+        DEFAULT_EXPOSE_ALL_ROUTER_SENSORS,
+    )
+    client_diagnostics = entry.options.get(
+        CONF_CLIENT_DIAGNOSTICS, DEFAULT_CLIENT_DIAGNOSTICS
+    )
+    flattened = flattened_scalars(coordinator.data or {})
+    selected = select_unique_fields(
+        coordinator.data or {}, set(KNOWN_SENSORS)
+    )
 
-    sensors = []
-
-    # Process all keys in the JSON and create sensors for them
-    # We'll use a flat structure for simplicity
-    for key, value in _flatten_dict(coordinator.data or {}).items():
-        # Skip non-scalar values
-        if not _is_value_scalar(value):
-            continue
-
-        # Check if this is a known sensor type
-        sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
-
-        if sensor_config:
-            # Create a configured sensor for known types
-            sensors.append(
-                ConfiguredZyxelSensor(
-                    coordinator,
-                    entry,
-                    key,
-                    sensor_config
-                )
-            )
-        else:
-            # Create a generic sensor for unknown types
-            sensors.append(
-                GenericZyxelSensor(
-                    coordinator,
-                    entry,
-                    key
-                )
-            )
+    sensors = [
+        ConfiguredZyxelSensor(
+            coordinator,
+            entry,
+            path,
+            KNOWN_SENSORS[field_name],
+            field_name,
+        )
+        for field_name, (path, _value) in selected.items()
+    ]
+    if expose_all:
+        sensors.extend(
+            GenericZyxelSensor(coordinator, entry, path)
+            for path in flattened
+            if path.rsplit(".", 1)[-1] not in KNOWN_SENSORS
+        )
 
     sensors.append(ZyxelConnectedClients(coordinator, entry))
+    intended_unique_ids = {
+        sensor.unique_id for sensor in sensors if sensor.unique_id is not None
+    }
+    _remove_unexposed_sensor_entities(
+        hass,
+        entry,
+        intended_unique_ids,
+        expose_all,
+        client_diagnostics,
+    )
     async_add_entities(sensors)
 
-    tracked: set[str] = set()
+    if not client_diagnostics:
+        return
+
+    tracked: set[tuple[str, str]] = set()
 
     @callback
     def discover_clients() -> None:
         new_entities = []
-        for mac in lan_hosts(coordinator):
-            if mac in tracked:
-                continue
-            tracked.add(mac)
-            new_entities.extend(
-                ZyxelClientSensor(coordinator, entry.entry_id, mac, spec)
-                for spec in CLIENT_SENSOR_SPECS
-            )
+        for mac, host in lan_hosts(coordinator).items():
+            for spec in CLIENT_SENSOR_SPECS:
+                entity_key = (mac, spec["id"])
+                if entity_key in tracked:
+                    continue
+                try:
+                    value = spec["value"](host)
+                except (TypeError, ValueError):
+                    value = None
+                if value is None:
+                    continue
+                tracked.add(entity_key)
+                new_entities.append(
+                    ZyxelClientSensor(
+                        coordinator, entry.entry_id, mac, spec
+                    )
+                )
         if new_entities:
             async_add_entities(new_entities)
 
@@ -286,10 +396,16 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
     _attr_entity_registry_enabled_default = True
 
     def __init__(
-        self, coordinator, entry: ConfigEntry, key: str, config: dict
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        key: str,
+        config: dict,
+        field_name: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
+        self._attr_unique_id = f"{entry.entry_id}_{field_name}"
         self._config = config
         self._attr_name = f"Zyxel {config['name']}"
         self._attr_native_unit_of_measurement = config["unit"]
