@@ -1,26 +1,30 @@
 ---
-name: Bug report / Unsupported device
-about: Report a bug or unsupported device
-title: ''
+name: "🐞 Bug Report / 🔌 Unsupported Device"
+about: Help us improve by reporting an issue or a missing device.
+title: "[BUG]: <Short description>"
 labels: bug
 assignees: ''
 
 ---
 
-**Zyxel device model**
-Example: NR7101
+> ### ⚠️ Project Status: Unmaintained
+> This repository is currently looking for active contributors. Please be aware that bug reports and support requests are **unlikely to be addressed** in the near future unless a new maintainer steps in.
+> 
+> Want to contribute? 
 
-**Integration version**
-Example: 2.0.2
+---
 
-**Describe the bug**
-A clear and concise description of what the bug is. If an error message appears please name it.
+### 📡 Device Information
+| Attribute | Details |
+| :--- | :--- |
+| **Zyxel Model** | *e.g., NR7101* |
+| **Integration Version** | *e.g., v2.0.2* |
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+---
 
-**To Reproduce**
-Describe the steps necessary to reproduce the problem.
+### 📝 Issue Description
+**What is happening?**
+> _Provide a clear and concise description of the bug. If you encountered a specific error message, please include the exact text or a code snippet below._
 
-**Screenshots**
-If able, add screenshots to help explain your problem.
+```text
+Insert error logs here (if applicable)
