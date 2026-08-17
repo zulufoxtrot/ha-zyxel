@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from custom_components.ha_zyxel.api import create_router, fetch_status
 from custom_components.ha_zyxel.const import (
     CONF_HOST,
     CONF_PASSWORD,
@@ -23,8 +24,6 @@ _LOGGER = logging.getLogger(__name__)
 nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
-from nr7101 import nr7101
-
 PLATFORMS = ["sensor", "button"]
 
 
@@ -38,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         router = await hass.async_add_executor_job(
-            nr7101.NR7101, host, username, password
+            create_router, host, username, password
         )
     except Exception as ex:
         _LOGGER.error("Could not connect to Zyxel router: %s", ex)
@@ -49,25 +48,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(15):
                 def get_all_data():
-                    data = router.get_status()
+                    data = fetch_status(router)
 
                     if not data:
                         raise UpdateFailed("No data received from router")
-
-                    # Get device info if not already in data
-                    if "device" not in data or not data["device"]:
-                        device_info = router.get_json_object("status")
-                        if device_info:
-                            data["device_info"] = device_info
 
                     return data
 
                 return await hass.async_add_executor_job(get_all_data)
         except asyncio.TimeoutError:
-            router._session_valid = False
+            router.sessionkey = None
             raise UpdateFailed("Router data fetch timed out")
         except Exception as err:
-            router._session_valid = False
+            router.sessionkey = None
             raise UpdateFailed(f"Error communicating with router: {err}") from err
 
     coordinator = DataUpdateCoordinator(
