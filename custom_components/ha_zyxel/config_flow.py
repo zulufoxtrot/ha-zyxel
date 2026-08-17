@@ -3,9 +3,15 @@ import logging
 
 import voluptuous as vol
 
-from homeassistant import config_entries, core, exceptions
+from homeassistant import config_entries, core
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
+from .api import (
+    ZyxelAuthenticationError,
+    ZyxelConnectionError,
+    create_router,
+    fetch_status,
+)
 from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -13,8 +19,6 @@ _LOGGER = logging.getLogger(__name__)
 # Block excessive nr7101 debug logging
 nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
-
-from nr7101 import nr7101
 
 DATA_SCHEMA = vol.Schema(
     {
@@ -31,21 +35,18 @@ async def validate_input(hass: core.HomeAssistant, data):
     try:
         # Create router instance and test connection
         router = await hass.async_add_executor_job(
-            nr7101.NR7101,
+            create_router,
             data[CONF_HOST],
             data[CONF_USERNAME],
             data[CONF_PASSWORD]
         )
 
-        login_success = await hass.async_add_executor_job(router.get_status)
-        if not login_success:
-            raise Exception("Login failed - check credentials")
-
-
-
+        await hass.async_add_executor_job(fetch_status, router)
+    except (ZyxelAuthenticationError, ZyxelConnectionError):
+        raise
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
-        raise ConnectionError from ex
+        raise ZyxelConnectionError from ex
 
     return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
 
@@ -72,8 +73,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 info = await validate_input(self.hass, user_input)
                 success = True
-            except Exception as e:  # pylint: disable=broad-except
-                _LOGGER.exception("First attempt failed", e)
+            except ZyxelAuthenticationError:
+                errors["base"] = "invalid_auth"
+            except ZyxelConnectionError as err:
+                _LOGGER.error("Connection attempt failed: %s", err)
                 errors["base"] = "cannot_connect"
 
             if not success and "https" not in user_input["host"]:
@@ -82,10 +85,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     info = await validate_input(self.hass, user_input)
                     success = True
-                except ConnectionError:
+                except ZyxelAuthenticationError:
+                    errors["base"] = "invalid_auth"
+                except ZyxelConnectionError:
                     errors["base"] = "cannot_connect"
                 except Exception as e:  # pylint: disable=broad-except
-                    _LOGGER.exception("Second attempt failed", e)
+                    _LOGGER.exception("Second attempt failed: %s", e)
                     errors["base"] = "unknown"
 
         if success:
@@ -94,7 +99,3 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=DATA_SCHEMA, errors=errors
             )
-
-
-class ConnectionError(exceptions.HomeAssistantError):
-    """Error to indicate we cannot connect."""
