@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Select Device Type",
+        "data": {
+          "device_type": "Device Type"
+        }
+      },
+      "legacy": {
+        "data": {
+          "host": "IP Address",
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "nwa50ax": {
+        "data": {
+          "host": "IP Address / Addresses (comma-separated)",
+          "username": "Username (usually 'admin')",
+          "password": "Password"
+        }
+      },
+      "ex3301_t0": {
+        "data": {
+          "host": "IP Address",
+          "username": "Username (usually 'admin')",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  }
+}

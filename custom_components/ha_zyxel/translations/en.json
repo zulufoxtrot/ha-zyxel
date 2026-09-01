@@ -3,8 +3,27 @@
     "step": {
       "user": {
         "data": {
-          "host": "Host",
+          "device_type": "Device Type"
+        }
+      },
+      "nwa50ax": {
+        "data": {
+          "host": "IP Address / Addresses (comma-separated)",
           "username": "Username (usually 'admin')",
+          "password": "Password"
+        }
+      },
+      "ex3301_t0": {
+        "data": {
+          "host": "IP Address",
+          "username": "Username (usually 'admin')",
+          "password": "Password"
+        }
+      },
+      "legacy": {
+        "data": {
+          "host": "IP Address",
+          "username": "Username",
           "password": "Password"
         }
       }
