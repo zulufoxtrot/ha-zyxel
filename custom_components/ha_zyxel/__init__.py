@@ -10,6 +10,10 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.ha_zyxel.api import create_router, fetch_status
+from custom_components.ha_zyxel.services import (
+    async_setup_services,
+    async_unload_services,
+)
 from custom_components.ha_zyxel.const import (
     CONF_HOST,
     CONF_PASSWORD,
@@ -79,6 +83,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "router": router,
     }
 
+    await async_setup_services(hass)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -96,5 +102,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+
+        if not hass.data[DOMAIN]:
+            async_unload_services(hass)
 
     return unload_ok

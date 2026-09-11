@@ -17,5 +17,25 @@
     "abort": {
       "already_configured": "L'appareil est déjà configuré"
     }
+  },
+  "services": {
+    "send_sms": {
+      "name": "Envoyer un SMS",
+      "description": "Envoie un message texte via le modem cellulaire de l'appareil.",
+      "fields": {
+        "config_entry": {
+          "name": "Appareil",
+          "description": "L'appareil Zyxel utilisé pour l'envoi. Facultatif si un seul est configuré."
+        },
+        "number": {
+          "name": "Destinataire",
+          "description": "Numéro de téléphone du destinataire. Tout caractère non numérique est ignoré."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Texte à envoyer. Limité à 160 caractères GSM ; les autres caractères sont refusés."
+        }
+      }
+    }
   }
 }

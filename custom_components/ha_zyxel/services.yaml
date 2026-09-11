@@ -1,0 +1,18 @@
+send_sms:
+  fields:
+    config_entry:
+      required: false
+      selector:
+        config_entry:
+          integration: ha_zyxel
+    number:
+      required: true
+      example: "+447700900123"
+      selector:
+        text:
+    message:
+      required: true
+      example: "The router is back online"
+      selector:
+        text:
+          multiline: true
