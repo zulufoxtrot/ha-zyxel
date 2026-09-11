@@ -82,6 +82,23 @@ Note: the Mushroom card extension is required for the above code to work.
 
 In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.
 
+## Sending SMS
+
+Devices with a cellular modem can send text messages with the `ha_zyxel.send_sms` service:
+
+```yaml
+action: ha_zyxel.send_sms
+data:
+  number: "+447700900123"
+  message: "The router is back online"
+```
+
+Notes:
+
+- `config_entry` selects the device to send from. It can be omitted when a single Zyxel device is configured.
+- Messages are sent with the GSM 03.38 character set, limited to 160 characters. Longer messages and characters outside that set (emoji, for instance) are refused instead of being sent truncated or garbled.
+- Everything that is not a digit is stripped from the recipient number, matching the device's own web interface.
+
 ## Support
 
 Please submit an [issue](https://github.com/zulufoxtrot/ha-zyxel/issues).

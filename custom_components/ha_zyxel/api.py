@@ -29,6 +29,10 @@ class ZyxelConnectionError(Exception):
     """Raised when no usable data can be fetched from the router."""
 
 
+class ZyxelSmsError(Exception):
+    """Raised when a message cannot be sent as written."""
+
+
 def create_router(host: str, username: str, password: str) -> Any:
     """Create a router with connection state isolated from other instances.
 
@@ -107,4 +111,55 @@ def fetch_status(router: Any) -> dict[str, Any]:
 
     raise ZyxelConnectionError(
         "The router returned no supported status data"
+    ) from last_error
+
+
+def validate_sms(number: str, message: str) -> None:
+    """Reject a message the router cannot send before touching the network.
+
+    nr7101 builds the ``cellwan_sms`` body without any request, so the same
+    call reports a non-GSM character, an over-long message or an empty
+    recipient up front instead of after a failed send and a reauthentication.
+    """
+    builder = getattr(nr7101, "build_sms_object", None)
+    if builder is None:
+        _LOGGER.debug("The installed nr7101 cannot validate SMS locally")
+        return
+
+    try:
+        body = builder(number, message)
+    except Exception as err:
+        raise ZyxelSmsError(str(err)) from err
+
+    if not body["SMS_To"]:
+        raise ZyxelSmsError("The recipient number contains no digits")
+
+
+def send_sms(router: Any, number: str, message: str) -> None:
+    """Send one SMS, reauthenticating once when the session has expired."""
+    validate_sms(number, message)
+
+    if not hasattr(router, "send_sms"):
+        raise ZyxelSmsError(
+            "The installed nr7101 version does not support sending SMS"
+        )
+
+    if not getattr(router, "sessionkey", None):
+        authenticate(router)
+
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            router.send_sms(number, message)
+            return
+        except Exception as err:
+            last_error = err
+            _LOGGER.debug("Zyxel SMS attempt %s failed: %s", attempt + 1, err)
+
+            if attempt == 0:
+                router.sessionkey = None
+                authenticate(router)
+
+    raise ZyxelConnectionError(
+        f"The router did not accept the message: {last_error}"
     ) from last_error
