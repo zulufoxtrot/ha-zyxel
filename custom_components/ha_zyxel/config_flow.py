@@ -22,6 +22,7 @@ nr7101_logger.setLevel(logging.WARNING)
 
 DATA_SCHEMA = vol.Schema(
     {
+        vol.Required("device_type", default="router"): vol.In({"router": "Router (existing support)", "nwa50ax": "NWA50AX (experimental)"}),
         vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
         vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
@@ -32,13 +33,15 @@ DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
 
+    router = None
     try:
         # Create router instance and test connection
         router = await hass.async_add_executor_job(
             create_router,
             data[CONF_HOST],
             data[CONF_USERNAME],
-            data[CONF_PASSWORD]
+            data[CONF_PASSWORD],
+            data.get("device_type", "router"),
         )
 
         await hass.async_add_executor_job(fetch_status, router)
@@ -47,6 +50,9 @@ async def validate_input(hass: core.HomeAssistant, data):
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
         raise ZyxelConnectionError from ex
+    finally:
+        if data.get("device_type") == "nwa50ax" and router is not None:
+            await hass.async_add_executor_job(router.close)
 
     return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
 
@@ -67,7 +73,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # sanitize entry
             if not host.startswith("http://") and not host.startswith("https://"):
-                host = f"https://{host}"
+                scheme = "http" if user_input.get("device_type") == "nwa50ax" else "https"
+                host = f"{scheme}://{host}"
                 user_input[CONF_HOST] = host
 
             try:
@@ -79,7 +86,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Connection attempt failed: %s", err)
                 errors["base"] = "cannot_connect"
 
-            if not success and "https" not in user_input["host"]:
+            if not success and user_input.get("device_type") != "nwa50ax" and "https" not in user_input["host"]:
                 _LOGGER.info("User specified http but it failed, trying https...")
                 user_input["host"] = user_input["host"].replace("http://", "https://")
                 try:
@@ -99,3 +106,4 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=DATA_SCHEMA, errors=errors
             )
+

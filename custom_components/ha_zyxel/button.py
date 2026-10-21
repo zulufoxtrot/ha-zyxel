@@ -16,6 +16,8 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the Zyxel buttons."""
+    if entry.data.get("device_type") == "nwa50ax":
+        return
     router = hass.data[DOMAIN][entry.entry_id]["router"]
     async_add_entities([ZyxelRebootButton(entry, router)])
 

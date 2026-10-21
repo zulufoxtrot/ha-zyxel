@@ -5,7 +5,8 @@
         "data": {
           "host": "Hôte",
           "username": "Nom d'utilisateur (habituellement 'admin')",
-          "password": "Mot de passe"
+          "password": "Mot de passe",
+          "device_type": "Device type"
         }
       }
     },

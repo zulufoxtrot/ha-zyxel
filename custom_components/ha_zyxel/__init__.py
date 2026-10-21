@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         router = await hass.async_add_executor_job(
-            create_router, host, username, password
+            create_router, host, username, password, entry.data.get("device_type", "router")
         )
     except Exception as ex:
         _LOGGER.error("Could not connect to Zyxel router: %s", ex)
@@ -46,7 +46,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update_data():
         """Fetch data from the router."""
         try:
-            async with async_timeout.timeout(15):
+            async with async_timeout.timeout(None if entry.data.get("device_type") == "nwa50ax" else 15):
                 def get_all_data():
                     data = fetch_status(router)
 
@@ -95,6 +95,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     )
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        data = hass.data[DOMAIN].pop(entry.entry_id)
+        if entry.data.get("device_type") == "nwa50ax":
+            await hass.async_add_executor_job(data["router"].close)
 
     return unload_ok

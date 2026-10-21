@@ -29,7 +29,7 @@ class ZyxelConnectionError(Exception):
     """Raised when no usable data can be fetched from the router."""
 
 
-def create_router(host: str, username: str, password: str) -> Any:
+def create_router(host: str, username: str, password: str, device_type: str = "router") -> Any:
     """Create a router with connection state isolated from other instances.
 
     nr7101 currently uses a mutable dictionary as its default ``params``
@@ -37,6 +37,9 @@ def create_router(host: str, username: str, password: str) -> Any:
     config-flow instance being reused by the config-entry instance, where
     they would be paired with a different AES key.
     """
+    if device_type == "nwa50ax":
+        from .ap_api import NWA50AXClient
+        return NWA50AXClient(host, username, password)
     return nr7101.NR7101(host, username, password, {})
 
 
@@ -92,6 +95,9 @@ def _fetch_available_endpoints(
 
 def fetch_status(router: Any) -> dict[str, Any]:
     """Return available router data, reauthenticating once when necessary."""
+    from .ap_api import NWA50AXClient
+    if isinstance(router, NWA50AXClient):
+        return router.fetch_status()
     if not getattr(router, "sessionkey", None):
         authenticate(router)
 

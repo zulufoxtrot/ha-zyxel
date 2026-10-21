@@ -157,6 +157,16 @@ KNOWN_SENSORS = {
 }
 
 
+KNOWN_SENSORS.update({
+    "ChannelUtilization": {"name": "Channel utilization", "unit": "%",
+        "icon": "mdi:wifi", "device_class": None, "state_class": SensorStateClass.MEASUREMENT},
+    "TxPower": {"name": "Transmit power", "unit": "dBm",
+        "icon": "mdi:antenna", "device_class": None, "state_class": SensorStateClass.MEASUREMENT},
+    "Channel": {"name": "Channel", "unit": None,
+        "icon": "mdi:wifi", "device_class": None, "state_class": None},
+})
+
+
 def _flatten_dict(d: dict, parent_key: str = "") -> dict:
     """Flatten a nested dictionary with dot notation for keys."""
     items = []
@@ -231,7 +241,8 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model="",
+            model=coordinator.data.get("device", {}).get("model", ""),
+            sw_version=coordinator.data.get("device", {}).get("firmware"),
         )
 
     @property
@@ -263,14 +274,15 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
-        self._attr_name = f"Zyxel {config['name']}"
+        radio = key.split(".")[1] if key.startswith("radios.") else ""
+        self._attr_name = f"Zyxel {radio} {config['name']}".replace("  ", " ")
         self._attr_native_unit_of_measurement = config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = config["device_class"]
         self._attr_state_class = config["state_class"]
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         try:
             return self._get_value_from_path()
@@ -288,7 +300,7 @@ class GenericZyxelSensor(AbstractZyxelSensor):
         return f"Zyxel {'.'.join(name_parts)}"
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         try:
             return self._get_value_from_path()
