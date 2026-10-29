@@ -1,7 +1,12 @@
 {
   "domain": "ha_zyxel",
   "name": "Zyxel",
-  "codeowners": ["@zulufoxtrot", "@HennieLP", "@martijnmelchers", "@Igglybuff"],
+  "codeowners": [
+    "@zulufoxtrot",
+    "@HennieLP",
+    "@martijnmelchers",
+    "@Igglybuff"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/zulufoxtrot/ha-zyxel",
@@ -10,5 +15,5 @@
   "requirements": [
     "nr7101@git+https://github.com/zulufoxtrot/nr7101.git@v2.0.2"
   ],
-  "version": "0.2.8"
+  "version": "0.2.9b2"
 }

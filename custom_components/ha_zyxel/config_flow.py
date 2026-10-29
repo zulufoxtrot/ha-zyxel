@@ -22,6 +22,7 @@ nr7101_logger.setLevel(logging.WARNING)
 
 DATA_SCHEMA = vol.Schema(
     {
+        vol.Required("device_type", default="router"): vol.In({"router": "Router (existing support)", "nwa50ax": "NWA access point: NWA50AX / NWA50BE (experimental)"}),
         vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
         vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
@@ -32,21 +33,42 @@ DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
 
+    router = None
+    is_ap = data.get("device_type") == "nwa50ax"
     try:
-        # Create router instance and test connection
-        router = await hass.async_add_executor_job(
-            create_router,
-            data[CONF_HOST],
-            data[CONF_USERNAME],
-            data[CONF_PASSWORD]
-        )
-
-        await hass.async_add_executor_job(fetch_status, router)
+        for _ in range(2):
+            if is_ap and data[CONF_HOST].startswith("https://"):
+                # Trust on first use: pin the AP's self-signed certificate.
+                from .ap_api import fetch_cert_fingerprint
+                data["cert_fingerprint"] = await hass.async_add_executor_job(
+                    fetch_cert_fingerprint, data[CONF_HOST]
+                )
+            router = await hass.async_add_executor_job(
+                create_router,
+                data[CONF_HOST],
+                data[CONF_USERNAME],
+                data[CONF_PASSWORD],
+                data.get("device_type", "router"),
+                data.get("cert_fingerprint"),
+            )
+            try:
+                await hass.async_add_executor_job(fetch_status, router)
+                break
+            except ZyxelConnectionError:
+                # Some APs (e.g. NWA50BE) redirect HTTP to HTTPS; retry there once.
+                upgraded = getattr(router, "host", data[CONF_HOST])
+                if not is_ap or upgraded == data[CONF_HOST]:
+                    raise
+                await hass.async_add_executor_job(router.close)
+                data[CONF_HOST] = upgraded
     except (ZyxelAuthenticationError, ZyxelConnectionError):
         raise
     except Exception as ex:
         _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
         raise ZyxelConnectionError from ex
+    finally:
+        if data.get("device_type") == "nwa50ax" and router is not None:
+            await hass.async_add_executor_job(router.close)
 
     return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
 
@@ -67,7 +89,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # sanitize entry
             if not host.startswith("http://") and not host.startswith("https://"):
-                host = f"https://{host}"
+                scheme = "http" if user_input.get("device_type") == "nwa50ax" else "https"
+                host = f"{scheme}://{host}"
                 user_input[CONF_HOST] = host
 
             try:
@@ -79,7 +102,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Connection attempt failed: %s", err)
                 errors["base"] = "cannot_connect"
 
-            if not success and "https" not in user_input["host"]:
+            if not success and user_input.get("device_type") != "nwa50ax" and "https" not in user_input["host"]:
                 _LOGGER.info("User specified http but it failed, trying https...")
                 user_input["host"] = user_input["host"].replace("http://", "https://")
                 try:
@@ -99,3 +122,4 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=DATA_SCHEMA, errors=errors
             )
+

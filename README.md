@@ -33,6 +33,11 @@ Confirmed working on:
 - VMG4005-B50A
 - VMG8825-T50
 
+Access points (experimental; choose "NWA access point" when adding the device):
+
+- NWA50AX
+- NWA50BE
+
 Potentially compatible with a lot more devices.
 If you do test and find out your device is working, please submit an issue or a pull request and I'll add it to the list.
 
