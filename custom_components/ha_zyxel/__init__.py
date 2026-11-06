@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
-PLATFORMS = ["sensor", "button"]
+PLATFORMS = ["sensor", "button", "switch"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -46,7 +46,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update_data():
         """Fetch data from the router."""
         try:
-            async with async_timeout.timeout(15):
+            # A full poll takes 7-10s on some models; never abandon one mid-flight,
+            # otherwise the next poll logs in again and invalidates its session.
+            async with async_timeout.timeout(90):
                 def get_all_data():
                     data = fetch_status(router)
 
@@ -57,7 +59,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 return await hass.async_add_executor_job(get_all_data)
         except asyncio.TimeoutError:
-            router.sessionkey = None
             raise UpdateFailed("Router data fetch timed out")
         except Exception as err:
             router.sessionkey = None
