@@ -12,11 +12,11 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.const import DOMAIN
+from custom_components.ha_zyxel.device_info import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -311,17 +311,15 @@ async def async_setup_entry(
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
+    # The device name already says "Zyxel", so entity names omit the prefix.
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, entry: ConfigEntry, key: str):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel ({entry.data['host']})",
-            manufacturer="Zyxel",
-            model="",
-        )
+        self._attr_device_info = build_device_info(entry, coordinator.data)
 
     @property
     def available(self) -> bool:
@@ -352,7 +350,7 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
-        self._attr_name = f"Zyxel {_readable_name(key, config['name'])}"
+        self._attr_name = _readable_name(key, config["name"])
         self._attr_native_unit_of_measurement = config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = config["device_class"]
@@ -380,7 +378,7 @@ class GenericZyxelSensor(AbstractZyxelSensor):
     @property
     def name(self):
         """Return the name of the sensor."""
-        return f"Zyxel {_readable_name(self._key)}"
+        return _readable_name(self._key)
 
     @property
     def state(self):
