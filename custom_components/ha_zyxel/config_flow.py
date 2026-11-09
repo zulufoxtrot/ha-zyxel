@@ -8,7 +8,9 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
 from .api import (
     ZyxelAuthenticationError,
+    ZyxelBusyError,
     ZyxelConnectionError,
+    close_router,
     create_router,
     fetch_status,
 )
@@ -41,7 +43,10 @@ async def validate_input(hass: core.HomeAssistant, data):
             data[CONF_PASSWORD]
         )
 
-        await hass.async_add_executor_job(fetch_status, router)
+        try:
+            await hass.async_add_executor_job(fetch_status, router)
+        finally:
+            await hass.async_add_executor_job(close_router, router)
     except (ZyxelAuthenticationError, ZyxelConnectionError):
         raise
     except Exception as ex:
@@ -74,6 +79,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 success = True
             except ZyxelAuthenticationError:
                 errors["base"] = "invalid_auth"
+            except ZyxelBusyError:
+                errors["base"] = "router_busy"
             except ZyxelConnectionError as err:
                 _LOGGER.error("Connection attempt failed: %s", err)
                 errors["base"] = "cannot_connect"
@@ -86,6 +93,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     success = True
                 except ZyxelAuthenticationError:
                     errors["base"] = "invalid_auth"
+                except ZyxelBusyError:
+                    errors["base"] = "router_busy"
                 except ZyxelConnectionError:
                     errors["base"] = "cannot_connect"
                 except Exception as e:  # pylint: disable=broad-except
