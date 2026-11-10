@@ -7,13 +7,13 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.api import set_port_forward_enabled, set_wifi_enabled
 from custom_components.ha_zyxel.const import DOMAIN
+from custom_components.ha_zyxel.device_info import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class PortForwardSwitch(CoordinatorEntity, SwitchEntity):
         self._router = router
         self._index = index
         self._attr_unique_id = f"{entry.entry_id}_nat_{index}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+        self._attr_device_info = build_device_info(entry, coordinator.data)
 
     def _rule(self) -> dict[str, Any] | None:
         for rule in (self.coordinator.data or {}).get("nat_rules") or []:
@@ -134,7 +134,7 @@ class WifiSwitch(CoordinatorEntity, SwitchEntity):
         self._router = router
         self._index = index
         self._attr_unique_id = f"{entry.entry_id}_wlan_{index}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+        self._attr_device_info = build_device_info(entry, coordinator.data)
         self._attr_entity_registry_enabled_default = default_on
 
     def _ssid(self) -> dict[str, Any] | None:
