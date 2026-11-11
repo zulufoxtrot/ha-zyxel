@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import base64
+import http.cookiejar
 import json
 import logging
 import os
 import threading
+import zlib
 import time
 from typing import Any
 
 import requests
+import urllib3
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from nr7101 import nr7101
@@ -28,6 +31,21 @@ _ENDPOINTS = (
     ("status", "device"),
 )
 
+
+# requests waits forever by default; a modem that accepts the connection and
+# never answers would pin an executor thread (and the host lock) for good.
+REQUEST_TIMEOUT = (10, 30)  # connect, read (seconds)
+# The two tiny requests nr7101 sends before login: a mute modem at startup
+# should not hold up Home Assistant for long.
+SETUP_TIMEOUT = (5, 10)
+# A poll that finds the previous operation still running gives up instead of
+# queueing another executor thread behind it. The wait counts against
+# POLL_BUDGET, so a long wait only shortens the poll.
+LOCK_TIMEOUT = 45
+# No new request or read starts once a poll has run this long, lock wait
+# included. The one in progress can still take a read timeout, so a poll ends
+# within POLL_BUDGET + 30 s: before the coordinator's 90 s limit abandons it.
+POLL_BUDGET = 55
 
 # The modem keeps a single login session per user: a new login invalidates the
 # AES key of the previous one, so any request still in flight decrypts to
@@ -52,6 +70,10 @@ class ZyxelConnectionError(Exception):
     """Raised when no usable data can be fetched from the router."""
 
 
+class ZyxelBusyError(ZyxelConnectionError):
+    """Raised when the previous request to the router has not finished yet."""
+
+
 def create_router(host: str, username: str, password: str) -> Any:
     """Create a router with connection state isolated from other instances.
 
@@ -60,20 +82,93 @@ def create_router(host: str, username: str, password: str) -> Any:
     config-flow instance being reused by the config-entry instance, where
     they would be paired with a different AES key.
     """
-    router = nr7101.NR7101(host, username, password, {})
-    router.ha_zyxel_lock = get_host_lock(host)
+    # One keep-alive connection for every request, login included, instead of
+    # a new TLS handshake each time. Cookies stay in router.params as before:
+    # the session's jar keeps none.
+    session = requests.Session()
+    session.cookies.set_policy(http.cookiejar.DefaultCookiePolicy(allowed_domains=[]))
+    lock = get_host_lock(host)
+    # The constructor already talks to the modem: keep it out of a running poll.
+    if not lock.acquire(timeout=LOCK_TIMEOUT):
+        raise ZyxelBusyError("The router is busy with another request")
+    try:
+        # nr7101 passes these params to every request it makes.
+        router = nr7101.NR7101(
+            host, username, password, {"timeout": SETUP_TIMEOUT}, session=session
+        )
+    finally:
+        lock.release()
+    router.params["timeout"] = REQUEST_TIMEOUT
+    router.ha_zyxel_lock = lock
+    router.ha_zyxel_session = session
+    router.ha_zyxel_deadline = None
+    router.ha_zyxel_closed = False
     return router
+
+
+def _request_timeout(router: Any) -> tuple[float, float]:
+    """Return the timeout for the next request, within the poll's budget."""
+    if router.ha_zyxel_deadline is None:
+        return REQUEST_TIMEOUT
+    left = router.ha_zyxel_deadline - time.monotonic()
+    if left <= 0:
+        raise requests.exceptions.Timeout("The poll ran out of time")
+    return (min(REQUEST_TIMEOUT[0], left), min(REQUEST_TIMEOUT[1], left))
+
+
+def close_router(router: Any) -> None:
+    """Log out and close the connection, best effort (the modem may be down)."""
+    # Set first: a login still in flight sees it and logs out itself.
+    router.ha_zyxel_closed = True
+    if not getattr(router, "sessionkey", None):
+        router.ha_zyxel_session.close()  # Not logged in: nothing to wait for.
+        return
+    # A running poll ends within POLL_BUDGET + one read: wait, then log out.
+    locked = router.ha_zyxel_lock.acquire(timeout=POLL_BUDGET + REQUEST_TIMEOUT[1])
+    try:
+        if locked:
+            _logout(router)
+        else:
+            _LOGGER.debug("Zyxel router still busy, not logging out")
+        router.ha_zyxel_session.close()
+    finally:
+        if locked:
+            router.ha_zyxel_lock.release()
+
+
+def _logout(router: Any) -> None:
+    """Log out on a new connection, best effort (the modem may be down)."""
+    _drop_kept_alive_connection(router)
+    url = f"{router.url}/cgi-bin/UserLogout?sessionkey={router.sessionkey}"
+    try:
+        # Not nr7101's logout(): it reads the whole reply, which a trickling
+        # modem can stretch forever. The reply is not needed past the headers.
+        with router.ha_zyxel_session.get(url, **{**router.params, "stream": True}):
+            pass
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Zyxel logout failed: %s", err)
+    router.sessionkey = None
 
 
 def authenticate(router: Any) -> None:
     """Log in and verify that nr7101 received a session key."""
+    if router.ha_zyxel_closed:
+        raise ZyxelConnectionError("The router connection was closed")
     try:
+        router.params["timeout"] = _request_timeout(router)
+        _drop_kept_alive_connection(router)  # Logins are rare; never on a stale socket.
         login_success = router.login()
     except Exception as err:
         raise ZyxelConnectionError("Unable to complete router login") from err
+    finally:
+        router.params["timeout"] = REQUEST_TIMEOUT
 
     if not login_success or not getattr(router, "sessionkey", None):
         raise ZyxelAuthenticationError("The router rejected the credentials")
+    if router.ha_zyxel_closed:  # Closed while this login was in flight.
+        _logout(router)
+        router.ha_zyxel_session.close()
+        raise ZyxelConnectionError("The router connection was closed")
 
 
 def _parse_traffic_object(obj: dict[str, Any] | None) -> dict[str, Any]:
@@ -97,11 +192,16 @@ def _fetch_available_endpoints(
 
     for endpoint, key in _ENDPOINTS:
         try:
-            data = router.get_json_object(endpoint)
+            objects = get_objects(router, endpoint)
+            data = objects[0] if objects else None
             if endpoint == "Traffic_Status":
                 data = _parse_traffic_object(data)
             if data:
                 result[key] = data
+        except requests.exceptions.Timeout:
+            # The modem is not answering: stop here rather than pile the
+            # remaining endpoints onto it.
+            raise
         except Exception as err:  # Different firmware exposes different endpoints.
             last_error = err
             _LOGGER.debug("Zyxel endpoint %s is unavailable: %s", endpoint, err)
@@ -117,32 +217,47 @@ def _fetch_available_endpoints(
 
 def fetch_status(router: Any) -> dict[str, Any]:
     """Return available router data, reauthenticating once when necessary."""
-    with router.ha_zyxel_lock:
+    start = time.monotonic()
+    if not router.ha_zyxel_lock.acquire(timeout=LOCK_TIMEOUT):
+        raise ZyxelBusyError("The previous request to the router is still running")
+    router.ha_zyxel_deadline = start + POLL_BUDGET
+    try:
         result = _fetch_status_locked(router)
-        # Port forwards are a list of objects, which get_json_object() (first
-        # object only) cannot return. Optional: not every model has them.
-        try:
-            rules = get_objects(router, "nat")
-            if rules:
-                result["nat_rules"] = rules
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Zyxel port forwards are unavailable: %s", err)
-        try:
-            # X_ZYXEL_Attribute 2 is an internal (mesh/backhaul) SSID.
-            ssids = [
-                s for s in get_objects(router, "wlan")
-                if "Index" in s and "wlEnable" in s and s.get("X_ZYXEL_Attribute") != 2
-            ]
-            if ssids:
-                result["wlan_ssids"] = ssids
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Zyxel Wi-Fi SSIDs are unavailable: %s", err)
+        # Port forwards are a list of objects.
+        rules = _optional_objects(router, "nat", "port forwards")
+        if rules:
+            result["nat_rules"] = rules
+        # X_ZYXEL_Attribute 2 is an internal (mesh/backhaul) SSID.
+        ssids = [
+            s for s in _optional_objects(router, "wlan", "Wi-Fi SSIDs")
+            if "Index" in s and "wlEnable" in s and s.get("X_ZYXEL_Attribute") != 2
+        ]
+        if ssids:
+            result["wlan_ssids"] = ssids
         return result
+    except requests.exceptions.Timeout:
+        raise  # A slow modem: the login is still good, keep it.
+    except Exception:
+        router.sessionkey = None  # The next poll logs in again.
+        raise
+    finally:
+        router.ha_zyxel_deadline = None
+        router.ha_zyxel_lock.release()
 
 
-def _decode(router: Any, response: requests.Response) -> dict[str, Any]:
-    """Decrypt a router response, tolerating plain JSON replies."""
-    data = response.json()
+def _optional_objects(router: Any, oid: str, what: str) -> list[dict[str, Any]]:
+    """Objects not every model has: skip them if missing; a timeout still ends the poll."""
+    try:
+        return get_objects(router, oid)
+    except requests.exceptions.Timeout:
+        raise
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Zyxel %s are unavailable: %s", what, err)
+        return []
+
+
+def _decode(router: Any, data: dict[str, Any]) -> dict[str, Any]:
+    """Decrypt a router reply, tolerating plain JSON replies."""
     if router.encryption_required and "iv" in data and "content" in data:
         return router.decrypt_response(data)
     return data
@@ -151,9 +266,39 @@ def _decode(router: Any, response: requests.Response) -> dict[str, Any]:
 def get_objects(router: Any, oid: str) -> list[dict[str, Any]]:
     """Return every object of a DAL oid (get_json_object only returns the first)."""
     url = f"{router.url}/cgi-bin/DAL?oid={oid}&sessionkey={router.sessionkey}"
-    with requests.get(url, **router.params) as response:
+    params = {
+        **router.params,
+        "timeout": _request_timeout(router),
+        "stream": True,
+        # Uncompressed, so every socket read is checked against the budget
+        # below; a decompressor could read many times before returning data.
+        "headers": {**router.params.get("headers", {}), "Accept-Encoding": "identity"},
+    }
+    try:
+        response = router.ha_zyxel_session.get(url, **params)
+    except requests.exceptions.ConnectionError as err:
+        if isinstance(err, requests.exceptions.Timeout):
+            raise
+        # The modem may have closed the kept-alive connection between polls.
+        # A read is safe to send again, and this one goes on a new connection.
+        params["timeout"] = _request_timeout(router)
+        response = router.ha_zyxel_session.get(url, **params)
+    with response:
         response.raise_for_status()
-        data = _decode(router, response)
+        # The read timeout only limits each wait for data: a modem trickling a
+        # large reply (lanhosts, nat) could run past the poll budget without
+        # this. read1() without decoding makes at most one socket read, so the
+        # budget is checked after every read.
+        body = bytearray()
+        try:
+            while chunk := response.raw.read1(65536, decode_content=False):
+                body += chunk
+                _request_timeout(router)  # Raises once the poll is out of time.
+        except urllib3.exceptions.ReadTimeoutError as err:
+            raise requests.exceptions.ReadTimeout(err) from err
+        if response.headers.get("Content-Encoding", "identity") != "identity":
+            body = zlib.decompress(body, zlib.MAX_WBITS | 32)  # gzip or zlib
+    data = _decode(router, json.loads(body))
     if data.get("result") != "ZCFG_SUCCESS":
         return []
     return data.get("Object") or []
@@ -175,6 +320,15 @@ def _encrypt_body(router: Any, payload: dict[str, Any]) -> str:
     )
 
 
+def _drop_kept_alive_connection(router: Any) -> None:
+    """Make the next request open a new connection.
+
+    A write is not safe to send twice, so it must not go on a kept-alive
+    connection the modem may have closed in the meantime.
+    """
+    router.ha_zyxel_session.close()  # The session stays usable.
+
+
 def put_object(router: Any, oid: str, payload: dict[str, Any]) -> dict[str, Any]:
     """PUT an object to /cgi-bin/DAL?oid=..., as the web UI does.
 
@@ -182,6 +336,7 @@ def put_object(router: Any, oid: str, payload: dict[str, Any]) -> dict[str, Any]
     one with 403, so keep ``router.sessionkey`` in sync like the web UI does.
     """
     with router.ha_zyxel_lock:
+        _drop_kept_alive_connection(router)
         if not getattr(router, "sessionkey", None):
             authenticate(router)
         for attempt in range(2):
@@ -193,7 +348,7 @@ def put_object(router: Any, oid: str, payload: dict[str, Any]) -> dict[str, Any]
             }
             params = dict(router.params)
             params["headers"] = {**params.get("headers", {}), **headers}
-            with requests.put(
+            with router.ha_zyxel_session.put(
                 f"{router.url}/cgi-bin/DAL?oid={oid}", data=data.encode("utf-8"), **params
             ) as response:
                 if response.status_code in (401, 403) and attempt == 0:
@@ -201,7 +356,7 @@ def put_object(router: Any, oid: str, payload: dict[str, Any]) -> dict[str, Any]
                     authenticate(router)
                     continue
                 response.raise_for_status()
-                reply = _decode(router, response)
+                reply = _decode(router, response.json())
             if reply.get("sessionkey"):
                 router.sessionkey = reply["sessionkey"]
             return reply
@@ -269,6 +424,7 @@ def reboot_router(router: Any) -> None:
     which newer firmware rejects with 403.
     """
     with router.ha_zyxel_lock:
+        _drop_kept_alive_connection(router)
         if not getattr(router, "sessionkey", None):
             authenticate(router)
         for attempt in range(2):
@@ -279,7 +435,7 @@ def reboot_router(router: Any) -> None:
                 "CSRFToken": str(router.sessionkey),
             }
             try:
-                with requests.post(f"{router.url}/cgi-bin/Reboot", **params) as response:
+                with router.ha_zyxel_session.post(f"{router.url}/cgi-bin/Reboot", **params) as response:
                     if response.status_code in (401, 403) and attempt == 0:
                         router.sessionkey = None
                         authenticate(router)
