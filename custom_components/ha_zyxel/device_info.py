@@ -10,13 +10,16 @@ from .const import DOMAIN
 
 
 def _first(data: dict[str, Any] | None, *paths: tuple[str, ...]) -> str | None:
-    """Return the first non-empty string found at any of the given key paths."""
     for path in paths:
+        value: Any = (data or {}).get(".".join(path))
+        if isinstance(value, (str, int, float)) and str(value).strip():
+            return str(value).strip()
+
         value: Any = data or {}
         for key in path:
             value = value.get(key) if isinstance(value, dict) else None
-        if isinstance(value, str) and value.strip():
-            return value.strip()
+        if isinstance(value, (str, int, float)) and str(value).strip():
+            return str(value).strip()
     return None
 
 
@@ -27,16 +30,30 @@ def build_device_info(entry: ConfigEntry, data: dict[str, Any] | None) -> Device
         ("device", "DeviceInfo", "ModelName"),
         ("cardpage", "DeviceInfo", "ModelName"),
     )
+    manufacturer = _first(
+        data,
+        ("device", "DeviceInfo", "Manufacturer"),
+        ("cardpage", "DeviceInfo", "Manufacturer"),
+    )
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name=f"Zyxel {model}" if model else f"Zyxel ({entry.data['host']})",
-        manufacturer="Zyxel",
+        manufacturer=manufacturer or "Zyxel",
         model=model or "",
         sw_version=_first(
             data,
             ("device", "DeviceInfo", "SoftwareVersion"),
             ("cardpage", "DeviceInfo", "SoftwareVersion"),
         ),
-        serial_number=None,
+        hw_version=_first(
+            data,
+            ("device", "DeviceInfo", "HardwareVersion"),
+            ("cardpage", "DeviceInfo", "HardwareVersion"),
+        ),
+        serial_number=_first(
+            data,
+            ("device", "DeviceInfo", "SerialNumber"),
+            ("cardpage", "DeviceInfo", "SerialNumber"),
+        ),
         configuration_url=entry.data["host"],
     )
