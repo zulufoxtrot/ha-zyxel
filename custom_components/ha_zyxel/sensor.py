@@ -13,10 +13,13 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_zyxel.const import DOMAIN
-from custom_components.ha_zyxel.device_info import build_device_info
+from .entity import (
+    ZyxelCoordinatorEntity,
+    get_parent_device_id,
+    sync_subdevice_areas,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -235,6 +238,14 @@ def _flatten_dict(d: dict, parent_key: str = "") -> dict:
     return dict(items)
 
 
+def _device_group_for_key(key: str) -> str | None:
+    """Return the top-level section for a sensor's subdevice, if any."""
+    section, separator, _ = key.partition(".")
+    if not separator or section == "device":
+        return None
+    return section
+
+
 def _is_duplicate(key: str, data: dict) -> bool:
     """Return True if an "Overview" value just repeats the "Device" section."""
     section, _, path = key.partition(".")
@@ -269,10 +280,21 @@ async def async_setup_entry(
         return
 
     sensors = []
+    flattened_data = _flatten_dict(coordinator.data)
+    parent_device_id = get_parent_device_id(hass, entry, flattened_data)
+    device_groups = {
+        device_group
+        for key, value in flattened_data.items()
+        if _is_value_scalar(value)
+        if (device_group := _device_group_for_key(key)) is not None
+    }
+    parent_area = sync_subdevice_areas(
+        hass, entry, parent_device_id, device_groups
+    )
 
     # Process all keys in the JSON and create sensors for them
     # We'll use a flat structure for simplicity
-    for key, value in _flatten_dict(coordinator.data).items():
+    for key, value in flattened_data.items():
         # Skip non-scalar values
         if not _is_value_scalar(value):
             continue
@@ -291,7 +313,10 @@ async def async_setup_entry(
                     coordinator,
                     entry,
                     key,
-                    sensor_config
+                    sensor_config,
+                    _device_group_for_key(key),
+                    parent_device_id,
+                    parent_area,
                 )
             )
         else:
@@ -300,7 +325,10 @@ async def async_setup_entry(
                 GenericZyxelSensor(
                     coordinator,
                     entry,
-                    key
+                    key,
+                    _device_group_for_key(key),
+                    parent_device_id,
+                    parent_area,
                 )
             )
 
@@ -308,18 +336,25 @@ async def async_setup_entry(
         async_add_entities(sensors)
 
 
-class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
+class AbstractZyxelSensor(ZyxelCoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
     # The device name already says "Zyxel", so entity names omit the prefix.
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+    def __init__(
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        key: str,
+        device_group: str | None = None,
+        parent_device_id: str | None = None,
+        suggested_area: str | None = None,
+    ):
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._key = key
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_device_info = build_device_info(entry, coordinator.data)
+        super().__init__(
+            coordinator, entry, key, device_group, parent_device_id, suggested_area
+        )
 
     @property
     def available(self) -> bool:
@@ -346,9 +381,20 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
+    def __init__(
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        key: str,
+        config: dict,
+        device_group: str | None = None,
+        parent_device_id: str | None = None,
+        suggested_area: str | None = None,
+    ):
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, key)
+        super().__init__(
+            coordinator, entry, key, device_group, parent_device_id, suggested_area
+        )
         self._config = config
         self._attr_name = _readable_name(key, config["name"])
         self._attr_native_unit_of_measurement = config["unit"]
@@ -368,9 +414,19 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
 class GenericZyxelSensor(AbstractZyxelSensor):
     """Representation of a generic Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+    def __init__(
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        key: str,
+        device_group: str | None = None,
+        parent_device_id: str | None = None,
+        suggested_area: str | None = None,
+    ):
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, key)
+        super().__init__(
+            coordinator, entry, key, device_group, parent_device_id, suggested_area
+        )
         self._attr_entity_registry_enabled_default = (
             key in ENABLED_BY_DEFAULT or key.startswith("cellular.")
         )
