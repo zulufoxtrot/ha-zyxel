@@ -12,6 +12,7 @@
     "error": {
       "cannot_connect": "La connexion a échoué",
       "invalid_auth": "L'authentification a échoué",
+      "router_busy": "Le routeur est occupé par une autre requête, réessayez dans une minute",
       "unknown": "Une erreur inattendue s'est produite"
     },
     "abort": {

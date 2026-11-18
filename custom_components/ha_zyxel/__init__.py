@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from custom_components.ha_zyxel.api import create_router, fetch_status
+from custom_components.ha_zyxel.api import close_router, create_router, fetch_status
 from custom_components.ha_zyxel.const import (
     CONF_HOST,
     CONF_PASSWORD,
@@ -61,7 +61,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except asyncio.TimeoutError:
             raise UpdateFailed("Router data fetch timed out")
         except Exception as err:
-            router.sessionkey = None
             raise UpdateFailed(f"Error communicating with router: {err}") from err
 
     coordinator = DataUpdateCoordinator(
@@ -72,15 +71,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
     )
 
-    await coordinator.async_config_entry_first_refresh()
-
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        "coordinator": coordinator,
-        "router": router,
-    }
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        hass.data[DOMAIN][entry.entry_id] = {
+            "coordinator": coordinator,
+            "router": router,
+        }
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:  # Cancellation included: never leave the login open.
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        try:
+            await hass.async_add_executor_job(close_router, router)
+        except Exception as err:  # noqa: BLE001 - keep the original error
+            _LOGGER.debug("Could not close the Zyxel router: %s", err)
+        raise
 
     return True
 
@@ -96,6 +101,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     )
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        data = hass.data[DOMAIN].pop(entry.entry_id)
+        # Stop polling first, or a refresh could log in again after logout.
+        await data["coordinator"].async_shutdown()
+        await hass.async_add_executor_job(close_router, data["router"])
 
     return unload_ok

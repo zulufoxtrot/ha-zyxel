@@ -12,6 +12,7 @@
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_auth": "Invalid authentication",
+      "router_busy": "The router is busy with another request, try again in a minute",
       "unknown": "Unexpected error"
     },
     "abort": {
