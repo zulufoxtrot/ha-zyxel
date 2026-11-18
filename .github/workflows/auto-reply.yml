@@ -1,0 +1,44 @@
+name: Auto-reply
+
+# Answers every new issue and pull request with the project's status, so a
+# contributor is not left waiting for a maintainer who has no time or test
+# device.
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  reply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post the automatic reply
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reply = [
+              "Automatic reply: Thanks for your contribution. I don't really have time to maintain this project anymore, and I lack a device for proper testing. I am looking for someone to take over the project's maintenance. Tag me (@zulufoxtrot) if interested.",
+            ].join("\n");
+
+            if (context.payload.pull_request) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: reply,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: reply,
+            });

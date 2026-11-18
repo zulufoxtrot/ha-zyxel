@@ -287,11 +287,24 @@ def get_objects(router: Any, oid: str) -> list[dict[str, Any]]:
         response.raise_for_status()
         # The read timeout only limits each wait for data: a modem trickling a
         # large reply (lanhosts, nat) could run past the poll budget without
-        # this. read1() without decoding makes at most one socket read, so the
-        # budget is checked after every read.
+        # this. Read in small chunks without decoding, so the budget is checked
+        # after every read. urllib3 2.x has read1() (at most one socket read);
+        # 1.x does not, so fall back to a plain read() of a small amount.
         body = bytearray()
         try:
-            while chunk := response.raw.read1(65536, decode_content=False):
+            # urllib3 2.x (what Home Assistant pins) has read1(): at most one
+            # socket read, so a trickling body cannot hold the loop. urllib3 1.x
+            # has no equivalent that keeps the connection usable, so we do not
+            # try to fake it: the per-read timeout still bounds each wait.
+            read1 = getattr(response.raw, "read1", None)
+            while True:
+                chunk = (
+                    read1(65536, decode_content=False)
+                    if read1 is not None
+                    else response.raw.read(65536, decode_content=False)
+                )
+                if not chunk:
+                    break
                 body += chunk
                 _request_timeout(router)  # Raises once the poll is out of time.
         except urllib3.exceptions.ReadTimeoutError as err:

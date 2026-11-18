@@ -10,6 +10,11 @@ from .const import DOMAIN
 
 
 def _first(data: dict[str, Any] | None, *paths: tuple[str, ...]) -> str | None:
+    """Return the first non-empty value found at any of the given key paths.
+
+    Values may be nested (``{"device": {"DeviceInfo": {...}}}``) or already
+    flattened (``{"device.DeviceInfo.ModelName": ...}``); both are checked.
+    """
     for path in paths:
         value: Any = (data or {}).get(".".join(path))
         if isinstance(value, (str, int, float)) and str(value).strip():

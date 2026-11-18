@@ -1,0 +1,64 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Home Assistant pins urllib3>=2.0; test against the same floor.
+          pip install "urllib3>=2.0" requests pycryptodome pytest pyflakes
+          # The integration's library, installed exactly as Home Assistant
+          # would from the manifest requirement.
+          pip install "nr7101 @ git+https://github.com/zulufoxtrot/nr7101.git@v2.0.3"
+
+      - name: Lint the tests
+        run: python -m pyflakes tests/
+
+      - name: Run the regression tests
+        run: python -m pytest tests/ -q
+
+  # A tag must never disagree with the manifest again (#78).
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Manifest version is valid and matches the tag (tags only)
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          manifest = json.loads(pathlib.Path("custom_components/ha_zyxel/manifest.json").read_text())
+          version = manifest["version"]
+          assert version and version[0].isdigit(), f"manifest version must start with a digit: {version!r}"
+          ref = os.environ.get("GITHUB_REF_NAME", "")
+          if ref.startswith("v"):
+              assert ref == f"v{version}", (
+                  f"tag {ref} does not match manifest version {version}; "
+                  "bump the manifest before tagging"
+              )
+          print(f"manifest version {version} OK (ref {ref})")
+          PY
