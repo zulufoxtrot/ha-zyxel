@@ -18,5 +18,14 @@
     "abort": {
       "already_configured": "L'appareil est déjà configuré"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Intervalle d'interrogation (secondes)"
+        }
+      }
+    }
   }
 }

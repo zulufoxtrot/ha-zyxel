@@ -70,6 +70,8 @@ Prerequisites:
 
 If connection fails, try with `http://` instead of `https://`.
 
+The router is polled every 30 seconds. To poll less often, open the integration and click **Configure** (30 to 3600 seconds).
+
 ## Adding cards to your dashboard
 
 Add [this code](resources/card_example.yml) to your dashboard to add the cards pictured above. Follow the instructions from the animation below.
