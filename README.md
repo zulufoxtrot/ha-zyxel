@@ -89,3 +89,4 @@ Please submit an [issue](https://github.com/zulufoxtrot/ha-zyxel/issues).
 ## Credits
 
 This integration uses the [n7101 library](https://github.com/pkorpine/nr7101) by pkorpine.
+<!-- test -->
