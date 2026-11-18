@@ -14,7 +14,15 @@ from .api import (
     create_router,
     fetch_status,
 )
-from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
+from .const import (
+    CONF_SCAN_INTERVAL,
+    DEFAULT_HOST,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_USERNAME,
+    DOMAIN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +68,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Zyxel devices."""
 
     VERSION = 1
+
+    @staticmethod
+    @core.callback
+    def async_get_options_flow(config_entry):
+        """Return the options flow."""
+        return OptionsFlowHandler()
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -107,3 +121,27 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=DATA_SCHEMA, errors=errors
             )
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Let the user change how often the router is polled."""
+
+    async def async_step_init(self, user_input=None):
+        """Show and save the polling interval."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        current = self.config_entry.options.get(
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SCAN_INTERVAL, default=current): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
+                    )
+                }
+            ),
+        )
