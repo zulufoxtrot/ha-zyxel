@@ -80,16 +80,28 @@ def install_home_assistant_stubs() -> None:
     stub_module("voluptuous", Schema=Stub, Required=lambda *args, **kwargs: None)
 
 
+_NR7101_AVAILABLE: bool | None = None
+
+
+def _has_nr7101() -> bool:
+    global _NR7101_AVAILABLE
+    if _NR7101_AVAILABLE is None:
+        _NR7101_AVAILABLE = importlib.util.find_spec("nr7101") is not None
+    return _NR7101_AVAILABLE
+
+
+NR7101_INSTALLED = _has_nr7101()
+
+
 def install_nr7101_stub() -> None:
     """Provide the nr7101 library when it is not installed."""
-    try:  # noqa: SIM105
-        import nr7101  # noqa: F401  (presence check only)
-    except ImportError:
-        lib = stub_module("nr7101")
-        lib.__path__ = []
-        inner = stub_module("nr7101.nr7101")
-        inner.NR7101 = Stub
-        lib.nr7101 = inner
+    if NR7101_INSTALLED:
+        return
+    lib = stub_module("nr7101")
+    lib.__path__ = []
+    inner = stub_module("nr7101.nr7101")
+    inner.NR7101 = Stub
+    lib.nr7101 = inner
 
 
 class _SiblingFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):

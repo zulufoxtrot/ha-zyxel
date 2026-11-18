@@ -24,9 +24,15 @@ import pytest
 import requests
 import urllib3
 
+import conftest
 from conftest import load
 
-# api.py imports nr7101 and no Home Assistant code; conftest fakes both.
+# These tests drive nr7101's real request code, so they need the library (CI
+# installs it from the manifest requirement). Home Assistant is never imported.
+pytestmark = pytest.mark.skipif(
+    not conftest.NR7101_INSTALLED,
+    reason="the nr7101 library is not installed",
+)
 _HAS_READ1 = hasattr(urllib3.response.HTTPResponse, "read1")
 
 
