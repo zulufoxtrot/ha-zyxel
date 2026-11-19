@@ -374,7 +374,9 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
                 uptime_seconds = int(float(value))
                 if uptime_seconds <= 0:
                     return None
-                update_time = self.coordinator.last_update_success_time
+                update_time = getattr(
+                    self.coordinator, "last_update_success_time", None
+                )
                 if update_time is None:
                     update_time = dt_util.utcnow()
                 return (
