@@ -187,7 +187,7 @@ ENABLED_BY_DEFAULT = {
     "lanhosts.wanInfo.wanStatus",
 }
 
-_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z]{2})(?=[A-Z][a-z]{2,})")
 
 
 def _humanize(token: str) -> str:
