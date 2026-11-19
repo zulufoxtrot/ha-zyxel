@@ -32,7 +32,7 @@ KNOWN_SENSORS = {
     "INTF_PhyCell_ID": {
         "name": "Physical Cell ID",
         "unit": None,
-        "icon": "mdi:antenna",
+        "icon": "mdi:radio-tower",
         "device_class": None,
         "state_class": None,
     },
@@ -60,7 +60,7 @@ KNOWN_SENSORS = {
     "INTF_MCS": {
         "name": "Cellular Modulation and Coding Scheme",
         "unit": "",
-        "icon": "mdi:signal",
+        "icon": "mdi:sine-wave",
         "device_class": None,
         "state_class": SensorStateClass.MEASUREMENT,
     },
@@ -88,7 +88,7 @@ KNOWN_SENSORS = {
     "NSA_PhyCellID": {
         "name": "NSA Physical Cell ID",
         "unit": None,
-        "icon": "mdi:antenna",
+        "icon": "mdi:radio-tower",
         "device_class": None,
         "state_class": None,
     },
@@ -144,14 +144,14 @@ KNOWN_SENSORS = {
     "BytesSent": {
         "name": "Bytes Sent",
         "unit": "B",
-        "icon": "mdi:numeric-10-box",
+        "icon": "mdi:upload",
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
     },
     "BytesReceived": {
         "name": "Bytes Received",
         "unit": "B",
-        "icon": "mdi:numeric-10-box",
+        "icon": "mdi:download",
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
     },
