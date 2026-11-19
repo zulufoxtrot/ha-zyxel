@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -14,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from custom_components.ha_zyxel.const import DOMAIN
 from custom_components.ha_zyxel.device_info import build_device_info
@@ -154,6 +156,13 @@ KNOWN_SENSORS = {
         "icon": "mdi:numeric-10-box",
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "UpTime": {
+        "name": "Last reboot",
+        "unit": None,
+        "icon": "mdi:clock-outline",
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "state_class": None,
     },
 }
 
@@ -360,8 +369,20 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
     def state(self):
         """Return the state of the sensor."""
         try:
-            return self._get_value_from_path()
-        except (KeyError, AttributeError):
+            value = self._get_value_from_path()
+            if self._key.rsplit(".", 1)[-1] == "UpTime":
+                uptime_seconds = int(float(value))
+                if uptime_seconds <= 0:
+                    return None
+                update_time = self.coordinator.last_update_success_time
+                if update_time is None:
+                    update_time = dt_util.utcnow()
+                return (
+                    update_time.replace(microsecond=0)
+                    - timedelta(seconds=uptime_seconds)
+                )
+            return value
+        except (KeyError, AttributeError, TypeError, ValueError):
             return None
 
 
