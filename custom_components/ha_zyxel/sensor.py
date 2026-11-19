@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -14,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from custom_components.ha_zyxel.const import DOMAIN
 from custom_components.ha_zyxel.device_info import build_device_info
@@ -154,6 +156,13 @@ KNOWN_SENSORS = {
         "icon": "mdi:numeric-10-box",
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "UpTime": {
+        "name": "Last reboot",
+        "unit": None,
+        "icon": "mdi:clock-outline",
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "state_class": None,
     },
 }
 
@@ -355,13 +364,31 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         self._attr_icon = config["icon"]
         self._attr_device_class = config["device_class"]
         self._attr_state_class = config["state_class"]
+        self._last_reboot_time = None
 
     @property
     def state(self):
         """Return the state of the sensor."""
         try:
-            return self._get_value_from_path()
-        except (KeyError, AttributeError):
+            value = self._get_value_from_path()
+            if self._key.rsplit(".", 1)[-1] == "UpTime":
+                uptime_seconds = int(float(value))
+                if uptime_seconds <= 0:
+                    return None
+                
+                update_time = dt_util.utcnow()
+                reboot_time = update_time - timedelta(seconds=uptime_seconds)
+                reboot_time = reboot_time.replace(second=0, microsecond=0)
+                if (
+                    self._last_reboot_time is None
+                    or abs(
+                        (reboot_time - self._last_reboot_time).total_seconds()
+                    ) > 60
+                ):
+                    self._last_reboot_time = reboot_time
+                return self._last_reboot_time
+            return value
+        except (KeyError, AttributeError, TypeError, ValueError):
             return None
 
 
