@@ -1,125 +1,421 @@
-"""The Zyxel integration."""
-import asyncio
-import logging
-from datetime import datetime, timedelta
+"""Support for Zyxel device sensors."""
+from __future__ import annotations
 
-import async_timeout
+import logging
+import re
+from datetime import timedelta
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from custom_components.ha_zyxel.api import close_router, create_router, fetch_status
-from custom_components.ha_zyxel.const import (
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    DEFAULT_SCAN_INTERVAL,
-    DOMAIN,
-)
+from custom_components.ha_zyxel.const import DOMAIN
+from custom_components.ha_zyxel.device_info import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
-# Block excessive nr7101 debug logging
-nr7101_logger = logging.getLogger("nr7101.nr7101")
-nr7101_logger.setLevel(logging.WARNING)
+# Define some known sensor types for proper configuration
+KNOWN_SENSORS = {
+    "INTF_RSSI": {
+        "name": "Cellular RSSI",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_PhyCell_ID": {
+        "name": "Physical Cell ID",
+        "unit": None,
+        "icon": "mdi:antenna",
+        "device_class": None,
+        "state_class": None,
+    },
+    "INTF_RSRP": {
+        "name": "Cellular Reference Signal Received Power",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_RSRQ": {
+        "name": "Cellular Reference Signal Received Quality",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_SINR": {
+        "name": "Cellular Signal-to-Noise Ratio",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_MCS": {
+        "name": "Cellular Modulation and Coding Scheme",
+        "unit": "",
+        "icon": "mdi:signal",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_CQI": {
+        "name": "Cellular Channel Quality Indicator",
+        "unit": "",
+        "icon": "mdi:signal",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_RI": {
+        "name": "Cellular Rank Indicator",
+        "unit": "",
+        "icon": "mdi:signal",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "INTF_PMI": {
+        "name": "Cellular Precoding Matrix Indicator",
+        "unit": "",
+        "icon": "mdi:signal",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "NSA_PhyCellID": {
+        "name": "NSA Physical Cell ID",
+        "unit": None,
+        "icon": "mdi:antenna",
+        "device_class": None,
+        "state_class": None,
+    },
+    "NSA_RSRP": {
+        "name": "NSA Reference Signal Received Power",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "NSA_RSRQ": {
+        "name": "NSA Reference Signal Received Quality",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "NSA_RSSI": {
+        "name": "NSA Reference Signal Strength Indicator",
+        "unit": "dBm",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "NSA_SINR": {
+        "name": "NSA Signal-to-Noise Ratio",
+        "unit": "dB",
+        "icon": "mdi:signal",
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "X_ZYXEL_TEMPERATURE_AMBIENT": {
+        "name": "Ambient Temperature",
+        "unit": "°C",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "X_ZYXEL_TEMPERATURE_SDX": {
+        "name": "SDX Temperature",
+        "unit": "°C",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "X_ZYXEL_TEMPERATURE_CPU0": {
+        "name": "CPU Temperature",
+        "unit": "°C",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT
+    },
+    "BytesSent": {
+        "name": "Bytes Sent",
+        "unit": "B",
+        "icon": "mdi:numeric-10-box",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "BytesReceived": {
+        "name": "Bytes Received",
+        "unit": "B",
+        "icon": "mdi:numeric-10-box",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "UpTime": {
+        "name": "Last reboot",
+        "unit": None,
+        "icon": "mdi:clock-outline",
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "state_class": None,
+    },
+}
 
-PLATFORMS = ["sensor", "button", "switch"]
+
+# Top-level keys of the coordinator data, see api._ENDPOINTS.
+SECTION_NAMES = {
+    "cellular": "Cellular",
+    "traffic": "Traffic",
+    "cardpage": "Overview",
+    "lan": "LAN",
+    "lanhosts": "LAN hosts",
+    "wifi_mesh": "Wi-Fi mesh",
+    "one_connect": "OneConnect",
+    "device": "Device",
+}
+
+# Generic sensors are created for every scalar the modem reports (hundreds,
+# mostly static configuration). Only these stay enabled by default; the rest
+# are created disabled and can be enabled from the entity registry. Everything
+# in the "cellular" section is always enabled by default.
+ENABLED_BY_DEFAULT = {
+    "device.DeviceInfo.UpTime",
+    "device.DeviceInfo.SoftwareVersion",
+    "device.DeviceInfo.ModelName",
+    "device.SystemInfo.CPUUsage",
+    "device.SystemInfo.Free",
+    "device.SystemInfo.Total",
+    "device.WanRate_RX",
+    "device.WanRate_TX",
+    "device.WanType",
+    "lanhosts.wanInfo.wanStatus",
+}
+
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
-class ZyxelDataUpdateCoordinator(DataUpdateCoordinator):
-    """Coordinator that records when Zyxel data was successfully fetched."""
+def _humanize(token: str) -> str:
+    """Turn a raw key such as 'X_ZYXEL_InterfaceUpTime' into 'Interface Up Time'."""
+    token = re.sub(r"^X_(ZYXEL_)?", "", token)
+    words = []
+    for part in token.split("_"):
+        words.extend(_CAMEL_BOUNDARY.sub(" ", part).split())
+    return " ".join(words).replace("Wi Fi", "Wi-Fi")
+
+
+def _readable_name(key: str, leaf: str | None = None) -> str:
+    """Build a readable, unique name from a flattened key.
+
+    ``traffic.br0.BytesReceived`` -> ``Traffic br0 Bytes Received``. ``leaf``
+    replaces the last path element (used for known sensors with curated names).
+    """
+    section, *path = key.split(".")
+    if leaf is not None:
+        path = path[:-1]
+    parts = [SECTION_NAMES.get(section, _humanize(section))]
+    # Skip empty path elements (the modem reports one traffic entry with no
+    # interface name), otherwise the name contains a double space.
+    parts.extend(h for h in (_humanize(p) for p in path) if h)
+    # "Device" + "Device Info ..." would read "Device Device Info ...".
+    if len(parts) > 1 and parts[1].split(" ")[0] == parts[0]:
+        parts = parts[:1] + [parts[1].removeprefix(parts[0]).strip()] + parts[2:]
+    if leaf is not None:
+        # Curated names such as "Cellular RSSI" already carry the section.
+        if len(parts) == 1 and leaf.startswith(parts[0]):
+            parts = []
+        parts.append(leaf)
+    return " ".join(parts)
+
+
+def _flatten_dict(d: dict, parent_key: str = "") -> dict:
+    """Flatten a nested dictionary with dot notation for keys."""
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}.{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def _is_duplicate(key: str, data: dict) -> bool:
+    """Return True if an "Overview" value just repeats the "Device" section."""
+    section, _, path = key.partition(".")
+    if section != "cardpage":
+        return False
+    device = data.get("device")
+    for part in path.split("."):
+        if not isinstance(device, dict) or part not in device:
+            return False
+        device = device[part]
+    return device == _get_path(data["cardpage"], path)
+
+
+def _get_path(data: dict, path: str) -> Any:
+    for part in path.split("."):
+        data = data[part]
+    return data
+
+
+def _is_value_scalar(value: Any) -> bool:
+    """Check if a value is a scalar (string, number, bool)."""
+    return isinstance(value, (str, int, float, bool)) or value is None
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up the Zyxel sensors."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+
+    if not coordinator.data:
+        return
+
+    sensors = []
+
+    # Process all keys in the JSON and create sensors for them
+    # We'll use a flat structure for simplicity
+    for key, value in _flatten_dict(coordinator.data).items():
+        # Skip non-scalar values
+        if not _is_value_scalar(value):
+            continue
+
+        # The Overview and Device sections report many identical values.
+        if _is_duplicate(key, coordinator.data):
+            continue
+
+        # Check if this is a known sensor type
+        sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
+
+        if sensor_config:
+            # Create a configured sensor for known types
+            sensors.append(
+                ConfiguredZyxelSensor(
+                    coordinator,
+                    entry,
+                    key,
+                    sensor_config
+                )
+            )
+        else:
+            # Create a generic sensor for unknown types
+            sensors.append(
+                GenericZyxelSensor(
+                    coordinator,
+                    entry,
+                    key
+                )
+            )
+
+    if sensors:
+        async_add_entities(sensors)
+
+
+class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
+    """Base class for Zyxel device sensors."""
+
+    # The device name already says "Zyxel", so entity names omit the prefix.
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_device_info = build_device_info(entry, coordinator.data)
 
     @property
-    def data_updated_at(self) -> datetime | None:
-        """Return the completion time of the last successful data fetch."""
-        return getattr(self, "_zyxel_data_updated_at", None)
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not self.coordinator.last_update_success:
+            return False
 
-    @data_updated_at.setter
-    def data_updated_at(self, value: datetime | None) -> None:
-        self._zyxel_data_updated_at = value
-
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Zyxel integration from a config entry."""
-
-
-    host = entry.data[CONF_HOST]
-    username = entry.data[CONF_USERNAME]
-    password = entry.data[CONF_PASSWORD]
-
-    try:
-        router = await hass.async_add_executor_job(
-            create_router, host, username, password
-        )
-    except Exception as ex:
-        _LOGGER.error("Could not connect to Zyxel router: %s", ex)
-        raise ConfigEntryNotReady from ex
-
-    async def async_update_data():
-        """Fetch data from the router."""
+        # Check if the key exists in the data
         try:
-            # A full poll takes 7-10s on some models; never abandon one mid-flight,
-            # otherwise the next poll logs in again and invalidates its session.
-            async with async_timeout.timeout(90):
-                def get_all_data():
-                    data = fetch_status(router)
+            self._get_value_from_path()
+            return True
+        except (KeyError, AttributeError):
+            return False
 
-                    if not data:
-                        raise UpdateFailed("No data received from router")
+    def _get_value_from_path(self) -> Any:
+        """Get a value from nested dictionaries using the flattened key."""
+        keys = self._key.split(".")
+        value = self.coordinator.data
+        for k in keys:
+            value = value[k]
+        return value
 
-                    return data
 
-                data = await hass.async_add_executor_job(get_all_data)
-                coordinator.data_updated_at = dt_util.utcnow()
-                return data
-        except asyncio.TimeoutError:
-            raise UpdateFailed("Router data fetch timed out")
-        except Exception as err:
-            raise UpdateFailed(f"Error communicating with router: {err}") from err
+class ConfiguredZyxelSensor(AbstractZyxelSensor):
+    """Representation of a configured Zyxel sensor."""
 
-    coordinator = ZyxelDataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=DOMAIN,
-        update_method=async_update_data,
-        update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
-    )
+    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, key)
+        self._config = config
+        self._attr_name = _readable_name(key, config["name"])
+        self._attr_native_unit_of_measurement = config["unit"]
+        self._attr_icon = config["icon"]
+        self._attr_device_class = config["device_class"]
+        self._attr_state_class = config["state_class"]
+        self._last_reboot_time = None
 
-    hass.data.setdefault(DOMAIN, {})
-    try:
-        await coordinator.async_config_entry_first_refresh()
-        hass.data[DOMAIN][entry.entry_id] = {
-            "coordinator": coordinator,
-            "router": router,
-        }
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    except BaseException:  # Cancellation included: never leave the login open.
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+    @property
+    def state(self):
+        """Return the state of the sensor."""
         try:
-            await hass.async_add_executor_job(close_router, router)
-        except Exception as err:  # noqa: BLE001 - keep the original error
-            _LOGGER.debug("Could not close the Zyxel router: %s", err)
-        raise
+            value = self._get_value_from_path()
+            if self._key.rsplit(".", 1)[-1] == "UpTime":
+                uptime_seconds = int(float(value))
+                if uptime_seconds <= 0:
+                    return None
+                
+                update_time = dt_util.utcnow()
+                reboot_time = update_time - timedelta(seconds=uptime_seconds)
+                reboot_time = reboot_time.replace(second=0, microsecond=0)
+                if (
+                    self._last_reboot_time is None
+                    or abs(
+                        (reboot_time - self._last_reboot_time).total_seconds()
+                    ) > 60
+                ):
+                    self._last_reboot_time = reboot_time
+                return self._last_reboot_time
+            return value
+        except (KeyError, AttributeError, TypeError, ValueError):
+            return None
 
-    return True
 
+class GenericZyxelSensor(AbstractZyxelSensor):
+    """Representation of a generic Zyxel sensor."""
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    unload_ok = all(
-        await asyncio.gather(
-            *[
-                hass.config_entries.async_forward_entry_unload(entry, platform)
-                for platform in PLATFORMS
-            ]
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, key)
+        self._attr_entity_registry_enabled_default = (
+            key in ENABLED_BY_DEFAULT or key.startswith("cellular.")
         )
-    )
-    if unload_ok:
-        data = hass.data[DOMAIN].pop(entry.entry_id)
-        # Stop polling first, or a refresh could log in again after logout.
-        await data["coordinator"].async_shutdown()
-        await hass.async_add_executor_job(close_router, data["router"])
 
-    return unload_ok
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        return _readable_name(self._key)
+
+    @property
+    def state(self):
+        """Return the state of the sensor."""
+        try:
+            return self._get_value_from_path()
+        except (KeyError, AttributeError):
+            return None
+
+    @property
+    def icon(self):
+        """Return the icon."""
+        return "mdi:router-wireless"
