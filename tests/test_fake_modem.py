@@ -53,6 +53,8 @@ class FakeModem:
         self.drip: set[str] = set()
         self.stall: set[str] = set()
         self.gzip: set[str] = set()
+        self.led: bool | None = None  # None: this firmware has no LEDStatus endpoint
+        self.led_requests: list[dict] = []
         self.logout_drip = False
         self.login_gate = threading.Event()
         self.login_gate.set()
@@ -102,6 +104,8 @@ class FakeModem:
                         self.close_connection = True
                         return
                     return self._send({"result": "ZCFG_SUCCESS"})
+                if url.path == "/cgi-bin/LEDStatus" and modem.led is not None:
+                    return self._send({"isactive": modem.led})
                 if url.path == "/cgi-bin/DAL":
                     oid = parse_qs(url.query)["oid"][0]
                     if oid in modem.gzip:
@@ -160,8 +164,12 @@ class FakeModem:
                 self.end_headers()
 
             def do_PUT(self):
-                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 modem.hits.append("PUT " + self.path)
+                if urlparse(self.path).path == "/cgi-bin/LEDStatus":
+                    modem.led = json.loads(body)["status"]
+                    modem.led_requests.append({"status": modem.led})
+                    return self._send({"isactive": modem.led})
                 return self._send({"result": "ZCFG_SUCCESS"})
 
             def do_POST(self):
@@ -494,6 +502,33 @@ def test_logout_with_dripping_reply_does_not_hang(api, modem):
         assert router.sessionkey is None
     finally:
         modem.logout_drip = False
+
+
+def test_led_state_is_read_on_every_poll(api, modem):
+    modem.led = True
+    router = api.create_router(modem.url, "admin", "pw")
+    assert api.fetch_status(router)["led"] is True
+    modem.led = False
+    assert api.fetch_status(router)["led"] is False
+    api.close_router(router)
+
+
+def test_led_is_left_out_when_the_firmware_has_no_led_endpoint(api, modem):
+    router = api.create_router(modem.url, "admin", "pw")  # modem.led is None: 404
+    data = api.fetch_status(router)
+    assert "led" not in data
+    assert "device" in data  # the rest of the poll is unaffected
+    api.close_router(router)
+
+
+def test_set_led_sends_the_status_flag(api, modem):
+    modem.led = True
+    router = api.create_router(modem.url, "admin", "pw")
+    assert not router.encryption_required  # the fake modem advertises no RSA key
+    api.set_led_enabled(router, False)
+    api.set_led_enabled(router, True)
+    assert modem.led_requests == [{"status": False}, {"status": True}]
+    api.close_router(router)
 
 
 if __name__ == "__main__":

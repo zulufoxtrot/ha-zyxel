@@ -54,7 +54,7 @@ def install_home_assistant_stubs() -> None:
         CONF_USERNAME="username",
     )
     stub_module("homeassistant.config_entries", ConfigEntry=Stub)
-    stub_module("homeassistant.core", HomeAssistant=Stub)
+    stub_module("homeassistant.core", HomeAssistant=Stub, callback=lambda func: func)
     stub_module("homeassistant.helpers.entity", DeviceInfo=dict)
     stub_module("homeassistant.helpers.entity_platform", AddEntitiesCallback=Stub)
     stub_module(

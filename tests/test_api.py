@@ -186,3 +186,97 @@ def test_set_port_forward_raises_when_refused():
             api.set_port_forward_enabled(router, {"Index": 1, "Enable": False}, True)
     finally:
         api.put_object = real_put
+
+
+class _FakeResponse:
+    """Just enough of requests.Response for get_led_state."""
+
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status_code = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise api.requests.exceptions.HTTPError(str(self.status_code))
+
+    def json(self):
+        return self._payload
+
+
+def _led_router(response=None, error=None):
+    class Session:
+        def get(self, url, **kwargs):
+            if error is not None:
+                raise error
+            return response
+
+    router = FakeCipherRouter()
+    router.ha_zyxel_deadline = None
+    router.ha_zyxel_session = Session()
+    return router
+
+
+def test_put_object_delegates_to_the_dal_endpoint(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api, "put_endpoint", lambda router, endpoint, payload: calls.append((endpoint, payload)) or {}
+    )
+    api.put_object(FakeCipherRouter(), "nat", {"Index": 1})
+    assert calls == [("DAL?oid=nat", {"Index": 1})]
+
+
+def test_set_led_enabled_sends_the_status_flag(monkeypatch):
+    calls = []
+
+    def fake_put(router, endpoint, payload):
+        calls.append((endpoint, payload))
+        return {"isactive": payload["status"]}
+
+    monkeypatch.setattr(api, "put_endpoint", fake_put)
+    api.set_led_enabled(FakeCipherRouter(), False)
+    api.set_led_enabled(FakeCipherRouter(), True)
+    assert calls == [("LEDStatus", {"status": False}), ("LEDStatus", {"status": True})]
+
+
+def test_set_led_enabled_raises_when_not_applied(monkeypatch):
+    monkeypatch.setattr(api, "put_endpoint", lambda *args: {"isactive": True})
+    with pytest.raises(api.ZyxelConnectionError):
+        api.set_led_enabled(FakeCipherRouter(), False)
+
+
+def test_set_led_enabled_raises_when_refused(monkeypatch):
+    monkeypatch.setattr(api, "put_endpoint", lambda *args: {"result": "ZCFG_ERROR"})
+    with pytest.raises(api.ZyxelConnectionError):
+        api.set_led_enabled(FakeCipherRouter(), True)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_get_led_state_reads_isactive(value):
+    router = _led_router(_FakeResponse({"isactive": value}))
+    assert api.get_led_state(router) is value
+
+
+def test_get_led_state_is_none_without_the_field():
+    assert api.get_led_state(_led_router(_FakeResponse({"result": "ZCFG_SUCCESS"}))) is None
+
+
+def test_get_led_state_is_none_on_http_error():
+    assert api.get_led_state(_led_router(_FakeResponse({}, status=404))) is None
+
+
+def test_get_led_state_keeps_a_rotated_session_key():
+    router = _led_router(_FakeResponse({"isactive": True, "sessionkey": "k2"}))
+    api.get_led_state(router)
+    assert router.sessionkey == "k2"
+
+
+def test_get_led_state_lets_timeouts_through():
+    router = _led_router(error=api.requests.exceptions.Timeout("slow"))
+    with pytest.raises(api.requests.exceptions.Timeout):
+        api.get_led_state(router)
