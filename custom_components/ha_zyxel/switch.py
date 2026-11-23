@@ -1,4 +1,4 @@
-"""Switches for Zyxel port-forward rules."""
+"""Switches for Zyxel port-forward rules, Wi-Fi networks and the status LED."""
 from __future__ import annotations
 
 import logging
@@ -6,12 +6,16 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from custom_components.ha_zyxel.api import set_port_forward_enabled, set_wifi_enabled
+from custom_components.ha_zyxel.api import (
+    set_led_enabled,
+    set_port_forward_enabled,
+    set_wifi_enabled,
+)
 from custom_components.ha_zyxel.const import DOMAIN
 from custom_components.ha_zyxel.device_info import build_device_info
 
@@ -21,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Create one switch per port-forward rule the router reports."""
+    """Create the switches the router supports: port forwards, Wi-Fi and the LED."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     rules = (coordinator.data or {}).get("nat_rules") or []
@@ -36,6 +40,7 @@ async def async_setup_entry(
         WifiSwitch(coordinator, data["router"], entry, ssid["Index"], ssid["Index"] in default_on)
         for ssid in ssids
     ]
+    entities.append(LedSwitch(coordinator, data["router"], entry))
     async_add_entities(entities)
 
 
@@ -197,5 +202,40 @@ class WifiSwitch(CoordinatorEntity, SwitchEntity):
             set_wifi_enabled, self._router, self._index, enabled
         )
         ssid["wlEnable"] = enabled
+        self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()
+
+
+class LedSwitch(CoordinatorEntity, SwitchEntity):
+    """Turn the router's status LEDs on or off."""
+
+    _attr_icon = "mdi:led-on"
+    _attr_has_entity_name = True
+    _attr_name = "LED"
+
+    def __init__(self, coordinator, router, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._router = router
+        self._attr_unique_id = f"{entry.entry_id}_led"
+        self._attr_device_info = build_device_info(entry, coordinator.data)
+        self._attr_is_on = (coordinator.data or {}).get("led")
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        # Keep the last known state if the router did not report the LED this poll.
+        led = (self.coordinator.data or {}).get("led")
+        if led is not None:
+            self._attr_is_on = led
+        super()._handle_coordinator_update()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._set(False)
+
+    async def _set(self, enabled: bool) -> None:
+        await self.hass.async_add_executor_job(set_led_enabled, self._router, enabled)
+        self._attr_is_on = enabled  # reflect immediately, the next poll confirms it
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()

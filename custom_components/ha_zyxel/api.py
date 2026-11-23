@@ -234,6 +234,9 @@ def fetch_status(router: Any) -> dict[str, Any]:
         ]
         if ssids:
             result["wlan_ssids"] = ssids
+        led = get_led_state(router)
+        if led is not None:
+            result["led"] = led
         return result
     except requests.exceptions.Timeout:
         raise  # A slow modem: the login is still good, keep it.
@@ -343,7 +346,12 @@ def _drop_kept_alive_connection(router: Any) -> None:
 
 
 def put_object(router: Any, oid: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """PUT an object to /cgi-bin/DAL?oid=..., as the web UI does.
+    """PUT an object to /cgi-bin/DAL?oid=..., as the web UI does."""
+    return put_endpoint(router, f"DAL?oid={oid}", payload)
+
+
+def put_endpoint(router: Any, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """PUT an encrypted body to /cgi-bin/<endpoint>, as the web UI does.
 
     The modem hands out a fresh session key in each reply and rejects the old
     one with 403, so keep ``router.sessionkey`` in sync like the web UI does.
@@ -362,7 +370,7 @@ def put_object(router: Any, oid: str, payload: dict[str, Any]) -> dict[str, Any]
             params = dict(router.params)
             params["headers"] = {**params.get("headers", {}), **headers}
             with router.ha_zyxel_session.put(
-                f"{router.url}/cgi-bin/DAL?oid={oid}", data=data.encode("utf-8"), **params
+                f"{router.url}/cgi-bin/{endpoint}", data=data.encode("utf-8"), **params
             ) as response:
                 if response.status_code in (401, 403) and attempt == 0:
                     router.sessionkey = None
@@ -427,6 +435,33 @@ def set_wifi_enabled(router: Any, index: int, enabled: bool) -> None:
                 return
         _LOGGER.debug("Wi-Fi change for SSID %s not applied, attempt %s", index, attempt + 1)
     raise ZyxelConnectionError(f"Router did not apply the Wi-Fi change for SSID {index}")
+
+
+def get_led_state(router: Any) -> bool | None:
+    """Read the status-LED state; None if the firmware does not answer."""
+    url = f"{router.url}/cgi-bin/LEDStatus"
+    params = {**router.params, "timeout": _request_timeout(router)}
+    try:
+        with router.ha_zyxel_session.get(url, **params) as response:
+            response.raise_for_status()
+            data = _decode(router, response.json())
+    except requests.exceptions.Timeout:
+        raise
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Zyxel LED state is unavailable: %s", err)
+        return None
+    if data.get("sessionkey"):
+        router.sessionkey = data["sessionkey"]
+    value = data.get("isactive")
+    return None if value is None else bool(value)
+
+
+def set_led_enabled(router: Any, enabled: bool) -> None:
+    """Turn the status LEDs on or off."""
+    reply = put_endpoint(router, "LEDStatus", {"status": enabled})
+    refused = reply.get("result", "ZCFG_SUCCESS") != "ZCFG_SUCCESS"
+    if refused or reply.get("isactive", enabled) != enabled:
+        raise ZyxelConnectionError(f"Router refused the change: {reply}")
 
 
 def reboot_router(router: Any) -> None:

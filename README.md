@@ -17,6 +17,7 @@ __Home Assistant integration for Zyxel devices__
 Confirmed working on:
 
 - AX7501-B0
+- EX5601-T1 (firmware V5.70)
 - FWA505
 - FWA510
 - FWA710 5G V2
@@ -81,6 +82,15 @@ Note: the Mushroom card extension is required for the above code to work.
 ## Available entities
 
 In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.
+
+### Switches and buttons
+
+Besides the read-only sensors, the integration can control the device:
+
+- **Port forward** switches: enable or disable each NAT rule.
+- **Wi-Fi** switches: enable or disable each SSID, per band.
+- **Reboot Device** button.
+- **LED** switch: turn the device's status LEDs on or off. The switch reads the current state from the router on every update. Tested on the EX5601-T1; on models whose firmware does not provide the `LEDStatus` endpoint the state stays unknown.
 
 ## Support
 
